@@ -13,12 +13,12 @@ class Video:
         
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
-        
+        self.ratio = self.frame.shape[0] / self.frame.shape[1]
+
     def _scale(self):
-        sizeX, sizeY, _ = self.frame.shape
+        sizeY, sizeX, _ = self.frame.shape
         if sizeX > 900 or sizeY > 900:
-            ratio = sizeX / sizeY
-            self.frame = cv2.resize(self.frame, (round(900/ratio), 900))
+            self.frame = cv2.resize(self.frame, (round(900/self.ratio), 900))
             self.scaleF = 900 / sizeY
 
         else:
@@ -39,11 +39,11 @@ class Video:
         for crop in self.cropping:
             self.frame = self.frame[crop[0][1]:crop[1][1], crop[0][0]:crop[1][0]]
 
-        # self._scale()
+        self._scale()
         cv2.imshow('Frame', self.frame)
 
     def onClick(self, event, posX, posY, flags, param):
-        pos = (round(posX * self.scaleF), round(posY * self.scaleF))
+        pos = (round(posX / self.scaleF), round(posY / self.scaleF))
         if self.isCropping:
             if event == 1:
                 self.croppingArea[0] = pos
