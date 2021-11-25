@@ -8,7 +8,9 @@ class Video:
         self.fps = self._capture.get(5)
         self.cropping = []
         self.croppingArea = [(), ()]
+
         self.isCropping = False
+        self.isRotating = False
         
         self.scaleF = 1
         self.rotate = 0
@@ -37,14 +39,27 @@ class Video:
             cv2.setMouseCallback('Frame', self.onClick)
             cv2.setWindowTitle('Frame', 'Cropping')
             key = cv2.waitKey()
-            if ord('r') == key:
-                self.rotate = (self.rotate + 1) % 4
-            elif key == 13:
+            if key == 13:
                 break
             elif key == -1:
                 quit()
 
         self.isCropping = False
+
+    def rotating(self):
+        self.isRotating = True
+        while True:
+            self.showFrame()
+            cv2.setWindowTitle('Frame', 'Rotating')
+            key = cv2.waitKey()
+            if key == 13:
+                break
+            elif ord('r') == key:
+                self.rotate = (self.rotate + 1) % 4
+            elif key == -1:
+                quit()
+
+        self.isRotating = False
 
     def showFrame(self):
         self.frame = self.source_img.copy()
@@ -56,7 +71,7 @@ class Video:
         cv2.imshow('Frame', self.frame)
 
     def onClick(self, event, posX, posY, flags, param):
-        pos = (round(posX / self.scaleF), round(posY / self.scaleF))
+        if self.rotate == 0: pos = (round(posX / self.scaleF), round(posY / self.scaleF))
         if self.isCropping:
             if event == 1:
                 self.croppingArea[0] = pos

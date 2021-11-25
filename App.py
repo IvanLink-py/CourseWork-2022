@@ -6,3 +6,4 @@ class App:
 
     def run(self):
         self._video.crop()
+        self._video.rotating()
