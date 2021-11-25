@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 
 class Video:
     def __init__(self, path):
@@ -10,6 +11,7 @@ class Video:
         self.isCropping = False
         
         self.scaleF = 1
+        self.rotate = 0
         
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
@@ -24,13 +26,23 @@ class Video:
         else:
             self.scaleF = 1
 
+    def _rotate(self):
+        if 1 <= self.rotate <= 3:
+            self.frame = np.rot90(self.frame, self.rotate)
+
     def crop(self):
         self.isCropping = True
-
-        self.showFrame()
-        cv2.setMouseCallback('Frame', self.onClick)
-        cv2.setWindowTitle('Frame', 'Cropping')
-        cv2.waitKey()
+        while True:
+            self.showFrame()
+            cv2.setMouseCallback('Frame', self.onClick)
+            cv2.setWindowTitle('Frame', 'Cropping')
+            key = cv2.waitKey()
+            if ord('r') == key:
+                self.rotate = (self.rotate + 1) % 4
+            elif key == 13:
+                break
+            elif key == -1:
+                quit()
 
         self.isCropping = False
 
@@ -40,6 +52,7 @@ class Video:
             self.frame = self.frame[crop[0][1]:crop[1][1], crop[0][0]:crop[1][0]]
 
         self._scale()
+        self._rotate()
         cv2.imshow('Frame', self.frame)
 
     def onClick(self, event, posX, posY, flags, param):
