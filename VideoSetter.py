@@ -67,7 +67,6 @@ class VideoSetter:
             else:
                 print(key)
 
-
         self.isCropping = False
 
     def rotating(self):
@@ -119,6 +118,9 @@ class VideoSetter:
         # Координаты с экрана → Кординаты исходного кадра
         pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
 
+        for crop in self.cropping:
+            pos = (pos[0] + crop[0][0], pos[1] + crop[0][1])
+
         if self.rotate == 0:
             pos = (pos[0], pos[1])
         elif self.rotate == 1:
@@ -130,14 +132,11 @@ class VideoSetter:
         else:
             raise IndexError
 
-
         return pos
 
     def showedCords(self, pos):
 
         # Кординаты исходного кадра → Координаты на экране
-
-
 
         if self.rotate == 0:
             pos = (pos[0], pos[1])
@@ -150,6 +149,9 @@ class VideoSetter:
 
         else:
             raise IndexError
+
+        for crop in self.cropping:
+            pos = (pos[0] - crop[0][0], pos[1] - crop[0][1])
 
         pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
 
@@ -227,7 +229,7 @@ class Digit:
 
     def removeCloser(self, pos):
         if self.segments:
-            self.segments.remove(min(self.segments, key=lambda p: (pos[0] - p.pos[0])**2 + (pos[1] - p.pos[1])**2))
+            self.segments.remove(min(self.segments, key=lambda p: (pos[0] - p.pos[0]) ** 2 + (pos[1] - p.pos[1]) ** 2))
 
 
 @dataclass
