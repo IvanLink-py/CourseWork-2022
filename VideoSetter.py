@@ -96,6 +96,8 @@ class VideoSetter:
             key = cv2.waitKey()
             if key == -1:
                 quit()
+            elif key == 8:
+                self.d1.removeLast()
             else:
                 print(key)
 
@@ -167,6 +169,9 @@ class VideoSetter:
             if event == 1:
                 self.d1.place(pos)
                 self.showFrame()
+            elif event == 5:
+                self.d1.removeCloser(pos)
+                self.showFrame()
 
     def getPlacement(self):
         return
@@ -216,6 +221,13 @@ class Digit:
 
     def draw(self):
         [seg.draw(self.video.frame) for seg in self.segments]
+
+    def removeLast(self):
+        self.segments.pop(-1)
+
+    def removeCloser(self, pos):
+        if self.segments:
+            self.segments.remove(min(self.segments, key=lambda p: (pos[0] - p.pos[0])**2 + (pos[1] - p.pos[1])**2))
 
 
 @dataclass
