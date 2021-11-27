@@ -1,10 +1,8 @@
-from Video import Video
+from VideoSetter import VideoSetter
 
 class App:
     def __init__(self):
-        self._video = Video('Experiments/E-1/video.mp4')
+        self._video = VideoSetter('Experiments/E-1/video.mp4')
 
     def run(self):
-        self._video.crop()
-        # self._video.rotating()
-        self._video.placement()
+        self._video.set()

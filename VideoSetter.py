@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 
 
-class Video:
+class VideoSetter:
 
     def __init__(self, path):
         self.path = path
@@ -22,6 +22,12 @@ class Video:
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
         self.ratio = self.frame.shape[0] / self.frame.shape[1]
+
+    def set(self):
+        cv2.setMouseCallback('Frame', self.onClick)
+        self.crop()
+        self.rotating()
+        self.placement()
 
     def _scale(self):
         sizeY, sizeX, _ = self.frame.shape
@@ -43,7 +49,6 @@ class Video:
         self.isCropping = True
         while True:
             self.showFrame()
-            cv2.setMouseCallback('Frame', self.onClick)
             cv2.setWindowTitle('Frame', 'Cropping')
             key = cv2.waitKey()
             if key == 13:
