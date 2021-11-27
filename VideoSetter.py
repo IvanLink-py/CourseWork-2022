@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import cv2
 import numpy as np
 
@@ -21,26 +23,33 @@ class VideoSetter:
 
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
-        self.ratio = self.frame.shape[0] / self.frame.shape[1]
+
+        self.sizeY, self.sizeX, _ = self.frame.shape
+        self.originalSize = (self.sizeX, self.sizeY)
+
+        self.ratio = self.sizeY / self.sizeX
 
     def set(self):
+        self.showFrame()
         cv2.setMouseCallback('Frame', self.onClick)
+
         self.crop()
         self.rotating()
         self.placement()
 
+        cv2.destroyWindow('Frame')
+
     def _scale(self):
-        sizeY, sizeX, _ = self.frame.shape
-        if sizeX > 900 or sizeY > 900:
+        self.sizeY, self.sizeX, _ = self.frame.shape
+        if self.sizeX > 900 or self.sizeY > 900:
             self.frame = cv2.resize(self.frame, (round(900 / self.ratio), 900))
-            self.scaleF = 900 / sizeY
+            self.scaleF = 900 / self.sizeY
 
         else:
             self.scaleF = 1
 
     def _rotate(self):
-        if 1 <= self.rotate <= 3:
-            self.frame = np.rot90(self.frame, self.rotate)
+        self.frame = np.ascontiguousarray(np.rot90(self.frame, self.rotate), dtype=np.uint8)
 
     def _drawSegments(self):
         self.d1.draw()
@@ -55,6 +64,9 @@ class VideoSetter:
                 break
             elif key == -1:
                 quit()
+            else:
+                print(key)
+
 
         self.isCropping = False
 
@@ -70,6 +82,8 @@ class VideoSetter:
                 self.rotate = (self.rotate + 1) % 4
             elif key == -1:
                 quit()
+            else:
+                print(key)
 
         self.isRotating = False
 
@@ -82,6 +96,8 @@ class VideoSetter:
             key = cv2.waitKey()
             if key == -1:
                 quit()
+            else:
+                print(key)
 
         self.isPlacement = False
 
@@ -93,10 +109,52 @@ class VideoSetter:
         self._scale()
         self._rotate()
         self._drawSegments()
+
         cv2.imshow('Frame', self.frame)
 
+    def convertCords(self, pos):
+
+        # Координаты с экрана → Кординаты исходного кадра
+        pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
+
+        if self.rotate == 0:
+            pos = (pos[0], pos[1])
+        elif self.rotate == 1:
+            pos = (self.originalSize[0] - pos[1], pos[0])
+        elif self.rotate == 2:
+            pos = (self.originalSize[0] - pos[0], self.originalSize[1] - pos[1])
+        elif self.rotate == 3:
+            pos = (pos[1], self.originalSize[1] - pos[0])
+        else:
+            raise IndexError
+
+
+        return pos
+
+    def showedCords(self, pos):
+
+        # Кординаты исходного кадра → Координаты на экране
+
+
+
+        if self.rotate == 0:
+            pos = (pos[0], pos[1])
+        elif self.rotate == 1:
+            pos = (pos[1], self.originalSize[0] - pos[0])
+        elif self.rotate == 2:
+            pos = (self.originalSize[0] - pos[0], self.originalSize[1] - pos[1])
+        elif self.rotate == 3:
+            pos = (self.originalSize[1] - pos[1], pos[0])
+
+        else:
+            raise IndexError
+
+        pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
+
+        return pos
+
     def onClick(self, event, posX, posY, flags, param):
-        pos = (round(posX / self.scaleF), round(posY / self.scaleF))
+        pos = self.convertCords((posX, posY))
         if self.isCropping:
             if event == 1:
                 self.croppingArea[0] = pos
@@ -110,31 +168,37 @@ class VideoSetter:
                 self.d1.place(pos)
                 self.showFrame()
 
+    def getPlacement(self):
+        return
+
 
 class Segment:
     size = 7
 
-    def __init__(self, digit, position):
+    def __init__(self, digit, position, setter):
         self.digit = digit
         self.pos = position
+        self.videoSetter = setter
 
     def scan(self, frame):
         return False
 
-    def getColor(self, frame):
-        print(frame[self.pos[1], self.pos[0]])
-        return frame[self.pos[1], self.pos[0]].tolist()
+    def getColor(self, frame, pos=None):
+        if pos is None:
+            pos = self.pos
+        return frame[pos[1], pos[0]].tolist()
 
     def draw(self, frame):
+        pos = self.videoSetter.showedCords(self.pos)
         cv2.rectangle(frame,
-                      (self.pos[0] - self.size, self.pos[1] - self.size),
-                      (self.pos[0] + self.size, self.pos[1] + self.size),
-                      self.getColor(frame),
+                      (pos[0] - self.size, pos[1] - self.size),
+                      (pos[0] + self.size, pos[1] + self.size),
+                      self.getColor(frame, pos),
                       -1)
         cv2.rectangle(frame,
-                      (self.pos[0] - self.size, self.pos[1] - self.size),
-                      (self.pos[0] + self.size, self.pos[1] + self.size),
-                      (0,0,0),
+                      (pos[0] - self.size, pos[1] - self.size),
+                      (pos[0] + self.size, pos[1] + self.size),
+                      (0, 0, 0),
                       1)
 
 
@@ -144,7 +208,7 @@ class Digit:
         self.video = video
 
     def place(self, position):
-        new_seg = Segment(self, position)
+        new_seg = Segment(self, position, self.video)
         self.segments.append(new_seg)
 
     def scan(self, frame):
@@ -152,3 +216,10 @@ class Digit:
 
     def draw(self):
         [seg.draw(self.video.frame) for seg in self.segments]
+
+
+@dataclass
+class VideoData:
+    startFrame: int
+    step: int
+    digits: list
