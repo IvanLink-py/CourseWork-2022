@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum, auto
 
 import cv2
 import numpy as np
@@ -15,11 +16,13 @@ class VideoSetter:
         self.isCropping = False
         self.isRotating = False
         self.isPlacement = False
+        self.isNaming = False
 
         self.scaleF = 1
         self.rotate = 0
         self.digits = []
         self.segmentsHistory = []
+        self.nameHistory = []
 
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
@@ -36,6 +39,7 @@ class VideoSetter:
         self.crop()
         self.rotating()
         self.placement()
+        self.naming()
 
         cv2.destroyWindow('Frame')
 
@@ -62,6 +66,9 @@ class VideoSetter:
             key = cv2.waitKey()
             if key == 13:
                 break
+            elif key == 8:
+                self.cropping.pop(-1)
+                self.showFrame()
             elif key == -1:
                 quit()
             else:
@@ -93,7 +100,9 @@ class VideoSetter:
             self.showFrame()
             cv2.setWindowTitle('Frame', 'Placement')
             key = cv2.waitKey()
-            if key == -1:
+            if key == 13:
+                break
+            elif key == -1:
                 quit()
             elif key == 8:
                 self.removeLast()
@@ -101,6 +110,24 @@ class VideoSetter:
                 print(key)
 
         self.isPlacement = False
+
+    def naming(self):
+        self.isNaming = True
+        self.namer = SegmentName.getName()
+        self.noNamedDigits = self.digits.copy()
+
+        self.showFrame()
+        cv2.setWindowTitle('Frame', 'Naming')
+        while True:
+            key = cv2.waitKey()
+            if key == 8:
+                self.nameHistory[-1].name = None
+                self.nameHistory.pop(-1)
+                self.showFrame()
+            elif key == 13 and self.allNamed():
+                break
+
+        self.isNaming = False
 
     def showFrame(self):
         self.frame = self.source_img.copy()
@@ -172,6 +199,24 @@ class VideoSetter:
                 self.setSegment(pos)
                 self.showFrame()
 
+        elif self.isNaming:
+            if event == 1:
+
+                for d in self.noNamedDigits:
+                    if d.isNamed():
+                        d.isNaming = False
+                        continue
+                    noNames = [s for s in d.segments if s.name is None]
+                    d.isNaming = True
+                    break
+
+                if noNames:
+                    seg = min(noNames, key=lambda p: (p.pos[0] - pos[0]) ** 2 + (p.pos[1] - pos[1]) ** 2)
+                    seg.name = self.namer.__next__()
+                    self.nameHistory.append(seg)
+
+                self.showFrame()
+
     def setSegment(self, pos):
         if not self.digits:
             self.digits.append(Digit(self))
@@ -194,8 +239,11 @@ class VideoSetter:
                 self.digits.remove(digit)
         self.showFrame()
 
+    def allNamed(self):
+        return all([d.isNamed() for d in self.digits])
+
     def export(self):
-        return VideoData(0, int(self.fps), )
+        return VideoData(0, int(self.fps), self.digits)
 
 
 class Segment:
@@ -205,6 +253,7 @@ class Segment:
         self.digit = digit
         self.pos = position
         self.videoSetter = setter
+        self.name = None
 
     def scan(self, frame):
         return False
@@ -221,10 +270,17 @@ class Segment:
                       (pos[0] + self.size, pos[1] + self.size),
                       self.getColor(frame, pos),
                       -1)
+
+        color = 0, 0, 0
+        if self.name is not None:
+            color = 0, 255, 0
+        elif self.digit.isNaming:
+            color = 255, 0, 0
+
         cv2.rectangle(frame,
                       (pos[0] - self.size, pos[1] - self.size),
                       (pos[0] + self.size, pos[1] + self.size),
-                      (0, 0, 0),
+                      color,
                       1)
 
 
@@ -232,6 +288,7 @@ class Digit:
     def __init__(self, video):
         self.segments = []
         self.video = video
+        self.isNaming = False
 
     def place(self, position):
         new_seg = Segment(self, position, self.video)
@@ -250,6 +307,9 @@ class Digit:
     def isFull(self):
         return len(self.segments) >= 7
 
+    def isNamed(self):
+        return all([s.name is not None for s in self.segments])
+
     def isEmpty(self):
         return not self.segments
 
@@ -259,3 +319,19 @@ class VideoData:
     startFrame: int
     step: int
     digits: list
+
+
+class SegmentName(Enum):
+    U = auto()
+    UL = auto()
+    UR = auto()
+    M = auto()
+    BL = auto()
+    BR = auto()
+    B = auto()
+
+    @staticmethod
+    def getName():
+        while True:
+            for name in SegmentName:
+                yield name
