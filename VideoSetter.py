@@ -5,7 +5,6 @@ import numpy as np
 
 
 class VideoSetter:
-
     def __init__(self, path):
         self.path = path
         self._capture = cv2.VideoCapture(path)
@@ -19,7 +18,8 @@ class VideoSetter:
 
         self.scaleF = 1
         self.rotate = 0
-        self.d1 = Digit(self)
+        self.digits = []
+        self.segmentsHistory = []
 
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
@@ -52,7 +52,7 @@ class VideoSetter:
         self.frame = np.ascontiguousarray(np.rot90(self.frame, self.rotate), dtype=np.uint8)
 
     def _drawSegments(self):
-        self.d1.draw()
+        [d.draw() for d in self.digits]
 
     def crop(self):
         self.isCropping = True
@@ -96,7 +96,7 @@ class VideoSetter:
             if key == -1:
                 quit()
             elif key == 8:
-                self.d1.removeLast()
+                self.removeLast()
             else:
                 print(key)
 
@@ -169,14 +169,33 @@ class VideoSetter:
                 self.showFrame()
         elif self.isPlacement:
             if event == 1:
-                self.d1.place(pos)
-                self.showFrame()
-            elif event == 5:
-                self.d1.removeCloser(pos)
+                self.setSegment(pos)
                 self.showFrame()
 
-    def getPlacement(self):
-        return
+    def setSegment(self, pos):
+        if not self.digits:
+            self.digits.append(Digit(self))
+        for d in self.digits:
+            if d.isFull():
+                continue
+            d.place(pos)
+            break
+        else:
+            self.digits.append(Digit(self))
+            self.digits[-1].place(pos)
+
+    def removeLast(self):
+        if self.segmentsHistory:
+            seg = self.segmentsHistory[-1]
+            digit = seg.digit
+            digit.segments.remove(seg)
+            self.segmentsHistory.remove(seg)
+            if digit.isEmpty():
+                self.digits.remove(digit)
+        self.showFrame()
+
+    def export(self):
+        return VideoData(0, int(self.fps), )
 
 
 class Segment:
@@ -217,6 +236,7 @@ class Digit:
     def place(self, position):
         new_seg = Segment(self, position, self.video)
         self.segments.append(new_seg)
+        self.video.segmentsHistory.append(new_seg)
 
     def scan(self, frame):
         data = [seg.scan(frame) for seg in self.segments]
@@ -227,9 +247,11 @@ class Digit:
     def removeLast(self):
         self.segments.pop(-1)
 
-    def removeCloser(self, pos):
-        if self.segments:
-            self.segments.remove(min(self.segments, key=lambda p: (pos[0] - p.pos[0]) ** 2 + (pos[1] - p.pos[1]) ** 2))
+    def isFull(self):
+        return len(self.segments) >= 7
+
+    def isEmpty(self):
+        return not self.segments
 
 
 @dataclass
