@@ -45,6 +45,7 @@ class VideoSetter:
 
     def _scale(self):
         self.sizeY, self.sizeX, _ = self.frame.shape
+        self.ratio = self.sizeY / self.sizeX
         if self.sizeX > 900 or self.sizeY > 900:
             self.frame = cv2.resize(self.frame, (round(900 / self.ratio), 900))
             self.scaleF = 900 / self.sizeY
@@ -202,6 +203,8 @@ class VideoSetter:
         elif self.isNaming:
             if event == 1:
 
+                noNames = []
+
                 for d in self.noNamedDigits:
                     if d.isNamed():
                         d.isNaming = False
@@ -245,6 +248,7 @@ class VideoSetter:
     def export(self):
         return VideoData(0, int(self.fps), self.digits, self._capture)
 
+
 class Scanner:
     def __init__(self, videoData):
         self.startFrame = videoData.startFrame
@@ -252,13 +256,34 @@ class Scanner:
         self.digits = videoData.digits
         self.capture = videoData.capture
 
+        _, self.currentFrame = self.capture.read()
+        self.FrameN = self.startFrame
+
         [dig.sort() for dig in self.digits]
 
+    def nextFrame(self):
+        self.capture.set(1, round(self.step * self.FrameN, 1))
+        self.FrameN += 1
+        ret, frame = self.capture.read()
+        if ret:
+            self.currentFrame = frame
+        else:
+            raise cv2.error
+
     def scan(self):
-        print(''.join(map(str, [d.scan() for d in self.digits])))
+        while True:
+            print(''.join(map(str, [d.scan(self.currentFrame) for d in self.digits])))
+            self.nextFrame()
+            if self.FrameN > 100:
+                print('end')
+                quit()
+
 
 class Segment:
     size = 7
+
+    onColor = np.array([194, 209, 191])
+    offColor = np.array([65, 56, 40])
 
     def __init__(self, digit, position, setter):
         self.digit = digit
@@ -267,12 +292,17 @@ class Segment:
         self.name = None
 
     def scan(self, frame):
-        return False
+        color = self.getColor(frame, toList=False)
 
-    def getColor(self, frame, pos=None):
+        offDif = np.sum(np.abs(self.offColor - color))
+        onDif = np.sum(np.abs(self.onColor - color))
+
+        return onDif < offDif
+
+    def getColor(self, frame, pos=None, toList=True):
         if pos is None:
             pos = self.pos
-        return frame[pos[1], pos[0]].tolist()
+        return frame[pos[1], pos[0]].tolist() if toList else frame[pos[1], pos[0]]
 
     def draw(self, frame):
         pos = self.videoSetter.showedCords(self.pos)
@@ -293,6 +323,8 @@ class Segment:
                       (pos[0] + self.size, pos[1] + self.size),
                       color,
                       1)
+
+        print(self.getColor(frame, pos))
 
 
 class Digit:
@@ -320,7 +352,7 @@ class Digit:
     def scan(self, frame):
         data = {}
         for seg in self.segments:
-            data[seg.name] = seg.scan()
+            data[seg.name] = seg.scan(frame)
 
         return self.interpret(data)
 
@@ -352,7 +384,6 @@ class VideoData:
     capture: cv2.VideoCapture
 
 
-
 class SegmentName(Enum):
     U = auto()
     UL = auto()
@@ -367,22 +398,22 @@ class SegmentName(Enum):
         while True:
             for name in SegmentName:
                 yield name
-                
-                
-class Interrupt:
-    _0 =  True , True , True , False, True , True , True
-    _1 =  False, False, True , False, False, True , False
-    _2 =  True , False, True , True , True , False, True
-    _3 =  True , False, True , True , False, True , True
-    _4 =  False, True , True , True , False, True , False
-    _5 =  True , True , False, True , False, True , True
-    _6 =  True , True , False, True , True , True , True
-    _7 =  True , False, True , False, False, True , False
-    _8 =  True , True , True , True , True , True , True
-    _9 =  True , True , True , True , False, True , True
 
-    digits = [_0,_1,_2,_3,_4,_5,_6,_7,_8,_9,]
-    dataToN = {_0:0,_1:1,_2:2,_3:3,_4:4,_5:5,_6:6,_7:7,_8:8,_9:9}
+
+class Interrupt:
+    _0 = True, True, True, False, True, True, True
+    _1 = False, False, True, False, False, True, False
+    _2 = True, False, True, True, True, False, True
+    _3 = True, False, True, True, False, True, True
+    _4 = False, True, True, True, False, True, False
+    _5 = True, True, False, True, False, True, True
+    _6 = True, True, False, True, True, True, True
+    _7 = True, False, True, False, False, True, False
+    _8 = True, True, True, True, True, True, True
+    _9 = True, True, True, True, False, True, True
+
+    digits = [_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, ]
+    dataToN = {_0: 0, _1: 1, _2: 2, _3: 3, _4: 4, _5: 5, _6: 6, _7: 7, _8: 8, _9: 9}
 
     @staticmethod
     def find(data):
@@ -390,18 +421,5 @@ class Interrupt:
             if d == data:
                 return Interrupt.dataToN[d]
         else:
+            print('Жопа')
             return 0
-        print('Жопа')
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
