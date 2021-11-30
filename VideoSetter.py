@@ -243,8 +243,19 @@ class VideoSetter:
         return all([d.isNamed() for d in self.digits])
 
     def export(self):
-        return VideoData(0, int(self.fps), self.digits)
+        return VideoData(0, int(self.fps), self.digits, self._capture)
 
+class Scanner:
+    def __init__(self, videoData):
+        self.startFrame = videoData.startFrame
+        self.step = videoData.step
+        self.digits = videoData.digits
+        self.capture = videoData.capture
+
+        [dig.sort() for dig in self.digits]
+
+    def scan(self):
+        print(''.join(map(str, [d.scan() for d in self.digits])))
 
 class Segment:
     size = 7
@@ -289,6 +300,17 @@ class Digit:
         self.segments = []
         self.video = video
         self.isNaming = False
+        self.sorted = {}
+        self._isSorted = False
+
+    def sort(self):
+        for segment in self.segments:
+            self.sorted[segment.name] = segment
+            if segment.name is None:
+                raise KeyError()
+        if len(self.sorted) != 7:
+            raise KeyError
+        self._isSorted = True
 
     def place(self, position):
         new_seg = Segment(self, position, self.video)
@@ -296,7 +318,15 @@ class Digit:
         self.video.segmentsHistory.append(new_seg)
 
     def scan(self, frame):
-        data = [seg.scan(frame) for seg in self.segments]
+        data = {}
+        for seg in self.segments:
+            data[seg.name] = seg.scan()
+
+        return self.interpret(data)
+
+    @staticmethod
+    def interpret(data):
+        return Interrupt.find(tuple(data.keys()))
 
     def draw(self):
         [seg.draw(self.video.frame) for seg in self.segments]
@@ -319,6 +349,8 @@ class VideoData:
     startFrame: int
     step: int
     digits: list
+    capture: cv2.VideoCapture
+
 
 
 class SegmentName(Enum):
@@ -335,3 +367,41 @@ class SegmentName(Enum):
         while True:
             for name in SegmentName:
                 yield name
+                
+                
+class Interrupt:
+    _0 =  True , True , True , False, True , True , True
+    _1 =  False, False, True , False, False, True , False
+    _2 =  True , False, True , True , True , False, True
+    _3 =  True , False, True , True , False, True , True
+    _4 =  False, True , True , True , False, True , False
+    _5 =  True , True , False, True , False, True , True
+    _6 =  True , True , False, True , True , True , True
+    _7 =  True , False, True , False, False, True , False
+    _8 =  True , True , True , True , True , True , True
+    _9 =  True , True , True , True , False, True , True
+
+    digits = [_0,_1,_2,_3,_4,_5,_6,_7,_8,_9,]
+    dataToN = {_0:0,_1:1,_2:2,_3:3,_4:4,_5:5,_6:6,_7:7,_8:8,_9:9}
+
+    @staticmethod
+    def find(data):
+        for d in Interrupt.digits:
+            if d == data:
+                return Interrupt.dataToN[d]
+        else:
+            return 0
+        print('Жопа')
+
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
