@@ -43,18 +43,18 @@ class VideoSetter:
 
         cv2.destroyWindow('Frame')
 
-    def _scale(self):
-        self.sizeY, self.sizeX, _ = self.frame.shape
+    def _scale(self, frame):
+        self.sizeY, self.sizeX, _ = frame.shape
         self.ratio = self.sizeY / self.sizeX
         if self.sizeX > 900 or self.sizeY > 900:
-            self.frame = cv2.resize(self.frame, (round(900 / self.ratio), 900))
+            frame = cv2.resize(frame, (round(900 / self.ratio), 900))
             self.scaleF = 900 / self.sizeY
-
         else:
             self.scaleF = 1
+        return frame
 
-    def _rotate(self):
-        self.frame = np.ascontiguousarray(np.rot90(self.frame, self.rotate), dtype=np.uint8)
+    def _rotate(self, frame):
+        return np.ascontiguousarray(np.rot90(frame, self.rotate), dtype=np.uint8)
 
     def _drawSegments(self):
         [d.draw() for d in self.digits]
@@ -135,8 +135,8 @@ class VideoSetter:
         for crop in self.cropping:
             self.frame = self.frame[crop[0][1]:crop[1][1], crop[0][0]:crop[1][0]]
 
-        self._scale()
-        self._rotate()
+        self.frame = self._scale(self.frame)
+        self.frame = self._rotate(self.frame)
         self._drawSegments()
 
         cv2.imshow('Frame', self.frame)
