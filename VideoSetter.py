@@ -36,8 +36,7 @@ class VideoSetter:
         self.showFrame()
         cv2.setMouseCallback('Frame', self.onClick)
 
-        self.crop()
-        self.rotating()
+        self.transform()
         self.placement()
         self.naming()
 
@@ -59,40 +58,27 @@ class VideoSetter:
     def _drawSegments(self):
         [d.draw() for d in self.digits]
 
-    def crop(self):
+    def transform(self):
         self.isCropping = True
         while True:
             self.showFrame()
-            cv2.setWindowTitle('Frame', 'Cropping')
+            cv2.setWindowTitle('Frame', 'Transform')
             key = cv2.waitKey()
             if key == 13:
                 break
             elif key == 8:
                 self.cropping.pop(-1)
                 self.showFrame()
+
+            elif ord('r') == key:
+                self.rotate = (self.rotate + 1) % 4
+
             elif key == -1:
                 quit()
             else:
                 print(key)
 
         self.isCropping = False
-
-    def rotating(self):
-        self.isRotating = True
-        while True:
-            self.showFrame()
-            cv2.setWindowTitle('Frame', 'Rotating')
-            key = cv2.waitKey()
-            if key == 13:
-                break
-            elif ord('r') == key:
-                self.rotate = (self.rotate + 1) % 4
-            elif key == -1:
-                quit()
-            else:
-                print(key)
-
-        self.isRotating = False
 
     def placement(self):
         self.isPlacement = True
@@ -129,6 +115,13 @@ class VideoSetter:
                 break
 
         self.isNaming = False
+
+    @staticmethod
+    def correctRect(pos1, pos2):
+        _pos1 = (pos1[0] if pos1[0] < pos2[0] else pos2[0]), (pos1[1] if pos1[1] < pos2[1] else pos2[1])
+        _pos2 = (pos1[0] if pos1[0] > pos2[0] else pos2[0]), (pos1[1] if pos1[1] > pos2[1] else pos2[1])
+        return _pos1, _pos2
+
 
     def showFrame(self):
         self.frame = self.source_img.copy()
@@ -192,7 +185,7 @@ class VideoSetter:
                 self.croppingArea[0] = pos
             elif event == 4:
                 self.croppingArea[1] = pos
-                self.cropping.append(tuple(self.croppingArea))
+                self.cropping.append(self.correctRect(*self.croppingArea))
                 self.croppingArea = [(), ()]
                 self.showFrame()
         elif self.isPlacement:
