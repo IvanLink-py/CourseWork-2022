@@ -9,6 +9,7 @@ class VideoSetter:
     def __init__(self, path):
         self.path = path
         self._capture = cv2.VideoCapture(path)
+        # self._capture.set(1, 500)
         self.fps = self._capture.get(5)
         self.cropping = []
         self.croppingArea = [(), ()]
@@ -55,8 +56,8 @@ class VideoSetter:
     def _rotate(self, frame):
         return np.ascontiguousarray(np.rot90(frame, self.rotate), dtype=np.uint8)
 
-    def _drawSegments(self):
-        [d.draw() for d in self.digits]
+    def _drawSegments(self, frame):
+        [d.draw(frame) for d in self.digits]
 
     def transform(self):
         self.isCropping = True
@@ -122,7 +123,6 @@ class VideoSetter:
         _pos2 = (pos1[0] if pos1[0] > pos2[0] else pos2[0]), (pos1[1] if pos1[1] > pos2[1] else pos2[1])
         return _pos1, _pos2
 
-
     def showFrame(self):
         self.frame = self.source_img.copy()
         for crop in self.cropping:
@@ -130,17 +130,18 @@ class VideoSetter:
 
         self.frame = self._scale(self.frame)
         self.frame = self._rotate(self.frame)
-        self._drawSegments()
+        self._drawSegments(self.frame)
 
         cv2.imshow('Frame', self.frame)
 
     def convertCords(self, pos):
 
         # Координаты с экрана → Кординаты исходного кадра
-        pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
 
         for crop in self.cropping:
             pos = (pos[0] + crop[0][0], pos[1] + crop[0][1])
+
+        pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
 
         if self.rotate == 0:
             pos = (pos[0], pos[1])
@@ -171,10 +172,10 @@ class VideoSetter:
         else:
             raise IndexError
 
+        pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
+
         for crop in self.cropping:
             pos = (pos[0] - crop[0][0], pos[1] - crop[0][1])
-
-        pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
 
         return pos
 
@@ -214,16 +215,21 @@ class VideoSetter:
                 self.showFrame()
 
     def setSegment(self, pos):
-        if not self.digits:
-            self.digits.append(Digit(self))
-        for d in self.digits:
-            if d.isFull():
-                continue
-            d.place(pos)
-            break
+        for seg in self.segmentsHistory:
+            if seg.getDistance(pos) < 100:
+                print('Пошёл нах*й')
+                break
         else:
-            self.digits.append(Digit(self))
-            self.digits[-1].place(pos)
+            if not self.digits:
+                self.digits.append(Digit(self))
+            for d in self.digits:
+                if d.isFull():
+                    continue
+                d.place(pos)
+                break
+            else:
+                self.digits.append(Digit(self))
+                self.digits[-1].place(pos)
 
     def removeLast(self):
         if self.segmentsHistory:
@@ -239,7 +245,7 @@ class VideoSetter:
         return all([d.isNamed() for d in self.digits])
 
     def export(self):
-        return VideoData(0, int(self.fps), self.digits, self._capture)
+        return VideoData(0, int(self.fps), self.digits, self._capture, self)
 
 
 class Scanner:
@@ -248,6 +254,9 @@ class Scanner:
         self.step = videoData.step
         self.digits = videoData.digits
         self.capture = videoData.capture
+        self.setter = videoData.setter
+
+        self.capture.set(1, self.startFrame)
 
         _, self.currentFrame = self.capture.read()
         self.FrameN = self.startFrame
@@ -255,20 +264,31 @@ class Scanner:
         [dig.sort() for dig in self.digits]
 
     def nextFrame(self):
-        self.capture.set(1, round(self.step * self.FrameN, 1))
+        self.capture.set(1, round(self.step * self.FrameN + self.startFrame))
         self.FrameN += 1
         ret, frame = self.capture.read()
         if ret:
-            self.currentFrame = frame
+            self.currentFrame = frame.copy()
+            frame = self.setter._scale(frame)
+            self.setter._drawSegments(frame)
+            cv2.imshow('debug', frame)
+
+            cv2.waitKey(1)
+            return False
         else:
-            raise cv2.error
+            return True
 
     def scan(self):
+        data = {}
         while True:
-            print(''.join(map(str, [d.scan(self.currentFrame) for d in self.digits])))
-            self.nextFrame()
-            if self.FrameN > 100:
-                print('end')
+            curr = ''.join(map(str, [d.scan(self.currentFrame) for d in self.digits]))
+            data[self.FrameN] = curr
+            q = self.nextFrame()
+            if q:
+                from pprint import pprint
+                pprint(data)
+                with open('data.txt', 'w', encoding='utf-8') as file:
+                    file.write(str(data))
                 quit()
 
 
@@ -317,7 +337,16 @@ class Segment:
                       color,
                       1)
 
-        print(self.getColor(frame, pos))
+        cv2.rectangle(frame,
+                      (pos[0] - self.size -1, pos[1] - self.size-1),
+                      (pos[0] + self.size+1, pos[1] + self.size+1),
+                      (255,255,255),
+                      1)
+
+        # print(self.getColor(frame, pos))
+
+    def getDistance(self, pos):
+        return (pos[0] - self.pos[0])**2 + (pos[1] - self.pos[1])**2
 
 
 class Digit:
@@ -334,7 +363,7 @@ class Digit:
             if segment.name is None:
                 raise KeyError()
         if len(self.sorted) != 7:
-            raise KeyError
+            raise KeyError(len(self.sorted))
         self._isSorted = True
 
     def place(self, position):
@@ -351,10 +380,10 @@ class Digit:
 
     @staticmethod
     def interpret(data):
-        return Interrupt.find(tuple(data.keys()))
+        return Interrupt.find(tuple(data.values()))
 
-    def draw(self):
-        [seg.draw(self.video.frame) for seg in self.segments]
+    def draw(self, frame):
+        [seg.draw(frame) for seg in self.segments]
 
     def removeLast(self):
         self.segments.pop(-1)
@@ -375,6 +404,8 @@ class VideoData:
     step: int
     digits: list
     capture: cv2.VideoCapture
+
+    setter: VideoSetter
 
 
 class SegmentName(Enum):
@@ -412,7 +443,8 @@ class Interrupt:
     def find(data):
         for d in Interrupt.digits:
             if d == data:
+                print('!'*20)
                 return Interrupt.dataToN[d]
         else:
-            print('Жопа')
+            print(data)
             return 0
