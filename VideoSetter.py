@@ -401,25 +401,21 @@ class SegmentName(Enum):
 
 
 class Interrupt:
-    _0 = True, True, True, False, True, True, True
-    _1 = False, False, True, False, False, True, False
-    _2 = True, False, True, True, True, False, True
-    _3 = True, False, True, True, False, True, True
-    _4 = False, True, True, True, False, True, False
-    _5 = True, True, False, True, False, True, True
-    _6 = True, True, False, True, True, True, True
-    _7 = True, False, True, False, False, True, False
-    _8 = True, True, True, True, True, True, True
-    _9 = True, True, True, True, False, True, True
-
-    digits = [_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, ]
-    dataToN = {_0: 0, _1: 1, _2: 2, _3: 3, _4: 4, _5: 5, _6: 6, _7: 7, _8: 8, _9: 9}
+    dataSet = {0: (True, True, True, False, True, True, True),
+               1: (False, False, True, False, False, True, False),
+               2: (True, False, True, True, True, False, True),
+               3: (True, False, True, True, False, True, True),
+               4: (False, True, True, True, False, True, False),
+               5: (True, True, False, True, False, True, True),
+               6: (True, True, False, True, True, True, True),
+               7: (True, False, True, False, False, True, False),
+               8: (True, True, True, True, True, True, True),
+               9: (True, True, True, True, False, True, True)}
 
     @staticmethod
     def find(data):
-        for d in Interrupt.digits:
-            if d == data:
-                return Interrupt.dataToN[d]
+        if data in list(Interrupt.dataSet.values()):
+            return True, Interrupt.dataSet[data]
         else:
             print('Жопа')
-            return 0
+            return False, 0
