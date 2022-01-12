@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from enum import Enum, auto
 
 import cv2
@@ -9,7 +8,6 @@ class VideoSetter:
     def __init__(self, path):
         self.path = path
         self._capture = cv2.VideoCapture(path)
-        # self._capture.set(1, 500)
         self.fps = self._capture.get(5)
         self.cropping = []
         self.croppingArea = [(), ()]
@@ -25,6 +23,9 @@ class VideoSetter:
         self.segmentsHistory = []
         self.nameHistory = []
 
+        self.currentFrameScan = 5
+        self.ScanFrame = self.fps
+
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
 
@@ -37,49 +38,90 @@ class VideoSetter:
         self.showFrame()
         cv2.setMouseCallback('Frame', self.onClick)
 
-        self.transform()
+        self.crop()
+        self.rotating()
         self.placement()
         self.naming()
 
         cv2.destroyWindow('Frame')
 
-    def _scale(self, frame):
-        self.sizeY, self.sizeX, _ = frame.shape
+    def scan(self):
+
+        [dig.sort() for dig in self.digits]
+
+        while True:
+            self._capture.set(1, round(self.ScanFrame * self.currentFrameScan, 1))
+            ret, self.source_img = self._capture.read()
+            if ret:
+                self.currentFrameScan += 1
+
+                scan_data = [d.scan(self.source_img) for d in self.digits]
+
+                for i, res in enumerate(scan_data):
+                    if not res[0]:
+                        self.digits[i].is_broken = True
+
+                print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in scan_data]))
+
+                self.showFrame()
+
+                if round(self.ScanFrame * (self.currentFrameScan + 1), 1) > self._capture.get(cv2.CAP_PROP_FRAME_COUNT):
+                    print('Done')
+                    break
+
+            else:
+                raise cv2.error
+
+    def _scale(self):
+        self.sizeY, self.sizeX, _ = self.frame.shape
         self.ratio = self.sizeY / self.sizeX
         if self.sizeX > 900 or self.sizeY > 900:
-            frame = cv2.resize(frame, (round(900 / self.ratio), 900))
+            self.frame = cv2.resize(self.frame, (round(900 / self.ratio), 900))
             self.scaleF = 900 / self.sizeY
+
         else:
             self.scaleF = 1
-        return frame
 
-    def _rotate(self, frame):
-        return np.ascontiguousarray(np.rot90(frame, self.rotate), dtype=np.uint8)
+    def _rotate(self):
+        self.frame = np.ascontiguousarray(np.rot90(self.frame, self.rotate), dtype=np.uint8)
 
-    def _drawSegments(self, frame):
-        [d.draw(frame) for d in self.digits]
+    def _drawSegments(self):
+        [d.draw() for d in self.digits]
 
-    def transform(self):
+    def crop(self):
         self.isCropping = True
         while True:
             self.showFrame()
-            cv2.setWindowTitle('Frame', 'Transform')
+            cv2.setWindowTitle('Frame', 'Cropping')
             key = cv2.waitKey()
             if key == 13:
                 break
             elif key == 8:
                 self.cropping.pop(-1)
                 self.showFrame()
-
-            elif ord('r') == key:
-                self.rotate = (self.rotate + 1) % 4
-
             elif key == -1:
                 quit()
             else:
                 print(key)
 
         self.isCropping = False
+
+    def rotating(self):
+        self.isRotating = True
+        while True:
+            self.showFrame()
+            cv2.setWindowTitle('Frame', 'Rotating')
+            key = cv2.waitKey()
+            if key == 13:
+                break
+            elif ord('r') == key:
+                self.rotate = (self.rotate + 1) % 4
+            elif key == -1:
+                quit()
+            else:
+                print(key)
+
+        self.isRotating = False
 
     def placement(self):
         self.isPlacement = True
@@ -117,31 +159,24 @@ class VideoSetter:
 
         self.isNaming = False
 
-    @staticmethod
-    def correctRect(pos1, pos2):
-        _pos1 = (pos1[0] if pos1[0] < pos2[0] else pos2[0]), (pos1[1] if pos1[1] < pos2[1] else pos2[1])
-        _pos2 = (pos1[0] if pos1[0] > pos2[0] else pos2[0]), (pos1[1] if pos1[1] > pos2[1] else pos2[1])
-        return _pos1, _pos2
-
     def showFrame(self):
         self.frame = self.source_img.copy()
         for crop in self.cropping:
             self.frame = self.frame[crop[0][1]:crop[1][1], crop[0][0]:crop[1][0]]
 
-        self.frame = self._scale(self.frame)
-        self.frame = self._rotate(self.frame)
-        self._drawSegments(self.frame)
+        self._scale()
+        self._rotate()
+        self._drawSegments()
 
         cv2.imshow('Frame', self.frame)
 
     def convertCords(self, pos):
 
         # Координаты с экрана → Кординаты исходного кадра
+        pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
 
         for crop in self.cropping:
             pos = (pos[0] + crop[0][0], pos[1] + crop[0][1])
-
-        pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
 
         if self.rotate == 0:
             pos = (pos[0], pos[1])
@@ -172,10 +207,10 @@ class VideoSetter:
         else:
             raise IndexError
 
-        pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
-
         for crop in self.cropping:
             pos = (pos[0] - crop[0][0], pos[1] - crop[0][1])
+
+        pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
 
         return pos
 
@@ -186,7 +221,7 @@ class VideoSetter:
                 self.croppingArea[0] = pos
             elif event == 4:
                 self.croppingArea[1] = pos
-                self.cropping.append(self.correctRect(*self.croppingArea))
+                self.cropping.append(tuple(self.croppingArea))
                 self.croppingArea = [(), ()]
                 self.showFrame()
         elif self.isPlacement:
@@ -215,21 +250,16 @@ class VideoSetter:
                 self.showFrame()
 
     def setSegment(self, pos):
-        for seg in self.segmentsHistory:
-            if seg.getDistance(pos) < 100:
-                print('Пошёл нах*й')
-                break
+        if not self.digits:
+            self.digits.append(Digit(self))
+        for d in self.digits:
+            if d.isFull():
+                continue
+            d.place(pos)
+            break
         else:
-            if not self.digits:
-                self.digits.append(Digit(self))
-            for d in self.digits:
-                if d.isFull():
-                    continue
-                d.place(pos)
-                break
-            else:
-                self.digits.append(Digit(self))
-                self.digits[-1].place(pos)
+            self.digits.append(Digit(self))
+            self.digits[-1].place(pos)
 
     def removeLast(self):
         if self.segmentsHistory:
@@ -244,9 +274,6 @@ class VideoSetter:
     def allNamed(self):
         return all([d.isNamed() for d in self.digits])
 
-    def export(self):
-        return VideoData(0, int(self.fps), self.digits, self._capture, self)
-
 
 class Scanner:
     def __init__(self, videoData):
@@ -254,41 +281,20 @@ class Scanner:
         self.step = videoData.step
         self.digits = videoData.digits
         self.capture = videoData.capture
-        self.setter = videoData.setter
-
-        self.capture.set(1, self.startFrame)
 
         _, self.currentFrame = self.capture.read()
         self.FrameN = self.startFrame
 
-        [dig.sort() for dig in self.digits]
-
     def nextFrame(self):
-        self.capture.set(1, round(self.step * self.FrameN + self.startFrame))
+        self.capture.set(1, round(self.step * self.FrameN, 1))
         self.FrameN += 1
-        ret, frame = self.capture.read()
-        if ret:
-            self.currentFrame = frame.copy()
-            frame = self.setter._scale(frame)
-            self.setter._drawSegments(frame)
-            cv2.imshow('debug', frame)
-
-            cv2.waitKey(1)
-            return False
-        else:
-            return True
 
     def scan(self):
-        data = {}
         while True:
-            curr = ''.join(map(str, [d.scan(self.currentFrame) for d in self.digits]))
-            data[self.FrameN] = curr
-            q = self.nextFrame()
-            if q:
-                from pprint import pprint
-                pprint(data)
-                with open('data.txt', 'w', encoding='utf-8') as file:
-                    file.write(str(data))
+
+            self.nextFrame()
+            if self.FrameN > 100:
+                print('end')
                 quit()
 
 
@@ -326,7 +332,9 @@ class Segment:
                       -1)
 
         color = 0, 0, 0
-        if self.name is not None:
+        if self.digit.is_broken:
+            color = 0, 255, 255
+        elif self.name is not None:
             color = 0, 255, 0
         elif self.digit.isNaming:
             color = 255, 0, 0
@@ -337,19 +345,12 @@ class Segment:
                       color,
                       1)
 
-        cv2.rectangle(frame,
-                      (pos[0] - self.size -1, pos[1] - self.size-1),
-                      (pos[0] + self.size+1, pos[1] + self.size+1),
-                      (255,255,255),
-                      1)
-
         # print(self.getColor(frame, pos))
-
-    def getDistance(self, pos):
-        return (pos[0] - self.pos[0])**2 + (pos[1] - self.pos[1])**2
 
 
 class Digit:
+    is_broken = False
+
     def __init__(self, video):
         self.segments = []
         self.video = video
@@ -363,7 +364,7 @@ class Digit:
             if segment.name is None:
                 raise KeyError()
         if len(self.sorted) != 7:
-            raise KeyError(len(self.sorted))
+            raise KeyError
         self._isSorted = True
 
     def place(self, position):
@@ -376,14 +377,16 @@ class Digit:
         for seg in self.segments:
             data[seg.name] = seg.scan(frame)
 
+        self.is_broken = False
+
         return self.interpret(data)
 
     @staticmethod
     def interpret(data):
-        return Interrupt.find(tuple(data.values()))
+        return Interrupt.find(tuple(data.keys()))
 
-    def draw(self, frame):
-        [seg.draw(frame) for seg in self.segments]
+    def draw(self):
+        [seg.draw(self.video.frame) for seg in self.segments]
 
     def removeLast(self):
         self.segments.pop(-1)
@@ -396,16 +399,6 @@ class Digit:
 
     def isEmpty(self):
         return not self.segments
-
-
-@dataclass
-class VideoData:
-    startFrame: int
-    step: int
-    digits: list
-    capture: cv2.VideoCapture
-
-    setter: VideoSetter
 
 
 class SegmentName(Enum):
@@ -425,26 +418,21 @@ class SegmentName(Enum):
 
 
 class Interrupt:
-    _0 = True, True, True, False, True, True, True
-    _1 = False, False, True, False, False, True, False
-    _2 = True, False, True, True, True, False, True
-    _3 = True, False, True, True, False, True, True
-    _4 = False, True, True, True, False, True, False
-    _5 = True, True, False, True, False, True, True
-    _6 = True, True, False, True, True, True, True
-    _7 = True, False, True, False, False, True, False
-    _8 = True, True, True, True, True, True, True
-    _9 = True, True, True, True, False, True, True
-
-    digits = [_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, ]
-    dataToN = {_0: 0, _1: 1, _2: 2, _3: 3, _4: 4, _5: 5, _6: 6, _7: 7, _8: 8, _9: 9}
+    dataSet = {0: (True, True, True, False, True, True, True),
+               1: (False, False, True, False, False, True, False),
+               2: (True, False, True, True, True, False, True),
+               3: (True, False, True, True, False, True, True),
+               4: (False, True, True, True, False, True, False),
+               5: (True, True, False, True, False, True, True),
+               6: (True, True, False, True, True, True, True),
+               7: (True, False, True, False, False, True, False),
+               8: (True, True, True, True, True, True, True),
+               9: (True, True, True, True, False, True, True)}
 
     @staticmethod
     def find(data):
-        for d in Interrupt.digits:
-            if d == data:
-                print('!'*20)
-                return Interrupt.dataToN[d]
+        if data in list(Interrupt.dataSet.values()):
+            return True, Interrupt.dataSet[data]
         else:
-            print(data)
-            return 0
+            print('Жопа')
+            return False, 0
