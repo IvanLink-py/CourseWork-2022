@@ -1,4 +1,4 @@
-from VideoSetter import VideoSetter, Scanner
+from VideoSetter import VideoSetter
 
 class App:
     def __init__(self):
@@ -6,6 +6,4 @@ class App:
 
     def run(self):
         self._video.set()
-        data = self._video.export()
-        self.scaner = Scanner(data)
-        self.scaner.scan()
+        self._video.scan()

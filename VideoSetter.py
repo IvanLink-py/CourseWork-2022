@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from enum import Enum, auto
 
 import cv2
@@ -24,6 +23,9 @@ class VideoSetter:
         self.segmentsHistory = []
         self.nameHistory = []
 
+        self.currentFrameScan = 5
+        self.ScanFrame = self.fps
+
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
 
@@ -42,6 +44,33 @@ class VideoSetter:
         self.naming()
 
         cv2.destroyWindow('Frame')
+
+    def scan(self):
+
+        [dig.sort() for dig in self.digits]
+
+        while True:
+            self._capture.set(1, round(self.ScanFrame * self.currentFrameScan, 1))
+            ret, self.source_img = self._capture.read()
+            if ret:
+                self.currentFrameScan += 1
+
+                scan_data = [d.scan(self.source_img) for d in self.digits]
+
+                for i, res in enumerate(scan_data):
+                    if not res[0]:
+                        self.digits[i].is_broken = True
+
+                print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in scan_data]))
+
+                self.showFrame()
+
+                if round(self.ScanFrame * (self.currentFrameScan + 1), 1) > self._capture.get(cv2.CAP_PROP_FRAME_COUNT):
+                    print('Done')
+                    break
+
+            else:
+                raise cv2.error
 
     def _scale(self):
         self.sizeY, self.sizeX, _ = self.frame.shape
@@ -245,9 +274,6 @@ class VideoSetter:
     def allNamed(self):
         return all([d.isNamed() for d in self.digits])
 
-    def export(self):
-        return VideoData(0, int(self.fps), self.digits, self._capture)
-
 
 class Scanner:
     def __init__(self, videoData):
@@ -259,20 +285,13 @@ class Scanner:
         _, self.currentFrame = self.capture.read()
         self.FrameN = self.startFrame
 
-        [dig.sort() for dig in self.digits]
-
     def nextFrame(self):
         self.capture.set(1, round(self.step * self.FrameN, 1))
         self.FrameN += 1
-        ret, frame = self.capture.read()
-        if ret:
-            self.currentFrame = frame
-        else:
-            raise cv2.error
 
     def scan(self):
         while True:
-            print(''.join(map(str, [d.scan(self.currentFrame) for d in self.digits])))
+
             self.nextFrame()
             if self.FrameN > 100:
                 print('end')
@@ -313,7 +332,9 @@ class Segment:
                       -1)
 
         color = 0, 0, 0
-        if self.name is not None:
+        if self.digit.is_broken:
+            color = 0, 255, 255
+        elif self.name is not None:
             color = 0, 255, 0
         elif self.digit.isNaming:
             color = 255, 0, 0
@@ -324,10 +345,12 @@ class Segment:
                       color,
                       1)
 
-        print(self.getColor(frame, pos))
+        # print(self.getColor(frame, pos))
 
 
 class Digit:
+    is_broken = False
+
     def __init__(self, video):
         self.segments = []
         self.video = video
@@ -354,6 +377,8 @@ class Digit:
         for seg in self.segments:
             data[seg.name] = seg.scan(frame)
 
+        self.is_broken = False
+
         return self.interpret(data)
 
     @staticmethod
@@ -374,14 +399,6 @@ class Digit:
 
     def isEmpty(self):
         return not self.segments
-
-
-@dataclass
-class VideoData:
-    startFrame: int
-    step: int
-    digits: list
-    capture: cv2.VideoCapture
 
 
 class SegmentName(Enum):
