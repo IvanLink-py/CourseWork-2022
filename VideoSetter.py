@@ -64,6 +64,7 @@ class VideoSetter:
                 print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in scan_data]))
 
                 self.showFrame()
+                cv2.waitKey(1)
 
                 if round(self.ScanFrame * (self.currentFrameScan + 1), 1) > self._capture.get(cv2.CAP_PROP_FRAME_COUNT):
                     print('Done')
@@ -143,7 +144,7 @@ class VideoSetter:
 
     def naming(self):
         self.isNaming = True
-        self.namer = SegmentName.getName()
+        self.namer = SN.getName()
         self.noNamedDigits = self.digits.copy()
 
         self.showFrame()
@@ -383,7 +384,7 @@ class Digit:
 
     @staticmethod
     def interpret(data):
-        return Interrupt.find(tuple(data.keys()))
+        return Interrupt.find(data)
 
     def draw(self):
         [seg.draw(self.video.frame) for seg in self.segments]
@@ -401,7 +402,7 @@ class Digit:
         return not self.segments
 
 
-class SegmentName(Enum):
+class SN(Enum):  # Segment Name
     U = auto()
     UL = auto()
     UR = auto()
@@ -413,26 +414,26 @@ class SegmentName(Enum):
     @staticmethod
     def getName():
         while True:
-            for name in SegmentName:
+            for name in SN:
                 yield name
 
 
 class Interrupt:
-    dataSet = {0: (True, True, True, False, True, True, True),
-               1: (False, False, True, False, False, True, False),
-               2: (True, False, True, True, True, False, True),
-               3: (True, False, True, True, False, True, True),
-               4: (False, True, True, True, False, True, False),
-               5: (True, True, False, True, False, True, True),
-               6: (True, True, False, True, True, True, True),
-               7: (True, False, True, False, False, True, False),
-               8: (True, True, True, True, True, True, True),
-               9: (True, True, True, True, False, True, True)}
+    dataSet = ({SN.U: True, SN.UL: True, SN.UR: True, SN.M: False, SN.BL: True, SN.BR: True, SN.B: True},  # 0
+               {SN.U: False, SN.UL: False, SN.UR: True, SN.M: False, SN.BL: False, SN.BR: True, SN.B: False},  # 1
+               {SN.U: True, SN.UL: False, SN.UR: True, SN.M: True, SN.BL: True, SN.BR: False, SN.B: True},  # 2
+               {SN.U: True, SN.UL: False, SN.UR: True, SN.M: True, SN.BL: False, SN.BR: True, SN.B: True},  # 3
+               {SN.U: False, SN.UL: True, SN.UR: True, SN.M: True, SN.BL: False, SN.BR: True, SN.B: False},  # 4
+               {SN.U: True, SN.UL: True, SN.UR: False, SN.M: True, SN.BL: False, SN.BR: True, SN.B: True},  # 5
+               {SN.U: True, SN.UL: True, SN.UR: False, SN.M: True, SN.BL: True, SN.BR: True, SN.B: True},  # 6
+               {SN.U: True, SN.UL: False, SN.UR: True, SN.M: False, SN.BL: False, SN.BR: True, SN.B: False},  # 7
+               {SN.U: True, SN.UL: True, SN.UR: True, SN.M: True, SN.BL: True, SN.BR: True, SN.B: True},  # 8
+               {SN.U: True, SN.UL: True, SN.UR: True, SN.M: True, SN.BL: False, SN.BR: True, SN.B: True})  # 9
 
     @staticmethod
     def find(data):
-        if data in list(Interrupt.dataSet.values()):
-            return True, Interrupt.dataSet[data]
+        if data in Interrupt.dataSet:
+            return True, Interrupt.dataSet.index(data)
         else:
             print('Жопа')
             return False, 0
