@@ -346,6 +346,12 @@ class Segment:
                       color,
                       1)
 
+        cv2.rectangle(frame,
+                      (pos[0] - self.size-1, pos[1] - self.size-1),
+                      (pos[0] + self.size+1, pos[1] + self.size+1),
+                      (255, 255, 255),
+                      1)
+
         # print(self.getColor(frame, pos))
 
 
