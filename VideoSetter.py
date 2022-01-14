@@ -55,13 +55,19 @@ class VideoSetter:
             if ret:
                 self.currentFrameScan += 1
 
-                scan_data = [d.scan(self.source_img) for d in self.digits]
+                self.scan_data = []
+                self.scan_interupt = []
 
-                for i, res in enumerate(scan_data):
+                for d in self.digits:
+                    scan = d.scan(self.source_img)
+                    self.scan_interupt.append(scan[0])
+                    self.scan_data.append(scan[1])
+
+                for i, res in enumerate(self.scan_interupt):
                     if not res[0]:
                         self.digits[i].is_broken = True
 
-                print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in scan_data]))
+                print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in self.scan_interupt]))
 
                 self.showFrame()
                 cv2.waitKey(1)
@@ -88,6 +94,43 @@ class VideoSetter:
 
     def _drawSegments(self):
         [d.draw() for d in self.digits]
+
+    def _drawBad(self):
+        for d in self.digits:
+            if d.is_broken:
+                break
+        else:
+            return
+
+        block = round(self.frame.shape[0] / 9)
+        digit_width = block * 5
+
+        digit_display_image = np.zeros((self.frame.shape[0], digit_width * len(self.digits), 3), np.uint8)
+
+        segments_positions = [
+            ((1 * block, 0 * block), (4 * block, 1 * block)),
+            ((0 * block, 1 * block), (1 * block, 4 * block)),
+            ((4 * block, 1 * block), (5 * block, 4 * block)),
+            ((1 * block, 4 * block), (4 * block, 5 * block)),
+            ((0 * block, 5 * block), (1 * block, 8 * block)),
+            ((4 * block, 5 * block), (5 * block, 8 * block)),
+            ((1 * block, 8 * block), (4 * block, 9 * block))
+        ]
+
+        for i, d in enumerate(self.digits):
+            main_anchor = np.array([digit_width * i, 0])
+
+            for s in range(7):
+                if list(self.scan_data[i].values())[s]:
+                    cv2.rectangle(digit_display_image,
+                                  main_anchor + segments_positions[s][0], main_anchor + segments_positions[s][1],
+                                  (255, 255, 255), -1)
+                else:
+                    cv2.rectangle(digit_display_image,
+                                  main_anchor + segments_positions[s][0], main_anchor + segments_positions[s][1],
+                                  (50, 50, 50), -1)
+
+        self.frame = np.concatenate((self.frame, digit_display_image), axis=1, dtype=np.uint8)
 
     def crop(self):
         self.isCropping = True
@@ -168,6 +211,7 @@ class VideoSetter:
         self._scale()
         self._rotate()
         self._drawSegments()
+        self._drawBad()
 
         cv2.imshow('Frame', self.frame)
 
@@ -347,8 +391,8 @@ class Segment:
                       1)
 
         cv2.rectangle(frame,
-                      (pos[0] - self.size-1, pos[1] - self.size-1),
-                      (pos[0] + self.size+1, pos[1] + self.size+1),
+                      (pos[0] - self.size - 1, pos[1] - self.size - 1),
+                      (pos[0] + self.size + 1, pos[1] + self.size + 1),
                       (255, 255, 255),
                       1)
 
@@ -386,7 +430,7 @@ class Digit:
 
         self.is_broken = False
 
-        return self.interpret(data)
+        return self.interpret(data), data
 
     @staticmethod
     def interpret(data):
