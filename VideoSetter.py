@@ -17,7 +17,8 @@ class VideoSetter:
         self.path = path
         self._capture = cv2.VideoCapture(path)
         self.fps = self._capture.get(5)
-        self.cropping = []
+        self.cropping = None
+        self.croppingHistory = []
         self.croppingArea = [(), ()]
 
         self.state = SetterState.Transforming
@@ -51,6 +52,8 @@ class VideoSetter:
         cv2.destroyWindow('Frame')
 
     def scan(self):
+
+        self.state = SetterState.Scanning
 
         [dig.sort() for dig in self.digits]
 
@@ -155,15 +158,16 @@ class VideoSetter:
             if key == 13:
                 break
             elif key == 8:
-                self.cropping.pop(-1)
-                self.showFrame()
+                if self.croppingHistory:
+                    self.croppingHistory.pop(-1)
+                    self.cropping = self.croppingHistory[-1]
+                    self.showFrame()
             elif ord('r') == key:
                 self.rotate = (self.rotate + 1) % 4
             elif key == -1:
                 quit()
             else:
                 print(key)
-
 
     def placement(self):
         self.state = SetterState.Placement
@@ -187,7 +191,7 @@ class VideoSetter:
 
     def naming(self):
         self.state = SetterState.Naming
-        
+
         self.namer = SN.getName()
         self.noNamedDigits = self.digits.copy()
 
@@ -202,11 +206,11 @@ class VideoSetter:
             elif key == 13 and self.allNamed():
                 break
 
-
     def showFrame(self):
         self.frame = self.source_img.copy()
-        for crop in self.cropping:
-            self.frame = self.frame[crop[0][1]:crop[1][1], crop[0][0]:crop[1][0]]
+
+        if self.cropping is not None:
+            self.frame = self.frame[self.cropping[0][1]:self.cropping[1][1], self.cropping[0][0]:self.cropping[1][0]]
 
         self._scale()
         self._rotate()
@@ -234,8 +238,8 @@ class VideoSetter:
 
         pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
 
-        for crop in self.cropping:
-            pos = (pos[0] + crop[0][0], pos[1] + crop[0][1])
+        if self.cropping is not None:
+            pos = (pos[0] + self.cropping[0][0], pos[1] + self.cropping[0][1])
 
         return pos
 
@@ -243,8 +247,8 @@ class VideoSetter:
 
         # Кординаты исходного кадра → Координаты на экране
 
-        for crop in self.cropping:
-            pos = (pos[0] - crop[0][0], pos[1] - crop[0][1])
+        if self.cropping is not None:
+            pos = (pos[0] - self.cropping[0][0], pos[1] - self.cropping[0][1])
 
         pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
 
@@ -271,7 +275,16 @@ class VideoSetter:
                 self.croppingArea[0] = pos
             elif event == 4:
                 self.croppingArea[1] = pos
-                self.cropping.append(tuple(self.croppingArea))
+
+                self.croppingArea = [(min(self.croppingArea[0][0], self.croppingArea[1][0]),
+                                  min(self.croppingArea[0][1], self.croppingArea[1][1])),
+
+                                 (max(self.croppingArea[0][0], self.croppingArea[1][0]),
+                                  max(self.croppingArea[0][1], self.croppingArea[1][1]))]
+
+                self.cropping = tuple(self.croppingArea)
+                self.croppingHistory.append(tuple(self.croppingArea))
+
                 self.croppingArea = [(), ()]
                 self.showFrame()
         elif self.state == SetterState.Placement:
