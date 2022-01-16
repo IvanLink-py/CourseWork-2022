@@ -72,7 +72,7 @@ class VideoSetter:
 
                 self.showFrame()
                 # cv2.waitKey(1)
-                cv2.waitKey(1000) 
+                cv2.waitKey(1000)
 
                 if round(self.ScanFrame * (self.currentFrameScan + 1), 1) > self._capture.get(cv2.CAP_PROP_FRAME_COUNT):
                     print('Done')
@@ -88,9 +88,9 @@ class VideoSetter:
             self.frame = cv2.resize(self.frame, (round(900 / self.ratio), 900))
             self.scaleF = 900 / self.sizeY
 
-        elif self.sizeX < 500 or self.sizeY < 500:
-            self.frame = cv2.resize(self.frame, (round(500 / self.ratio), 500))
-            self.scaleF = 500 / self.sizeY
+        elif self.sizeX < 600 or self.sizeY < 600:
+            self.frame = cv2.resize(self.frame, (round(600 / self.ratio), 600))
+            self.scaleF = 600 / self.sizeY
 
         else:
             self.scaleF = 1
@@ -183,7 +183,11 @@ class VideoSetter:
             cv2.setWindowTitle('Frame', 'Placement')
             key = cv2.waitKey()
             if key == 13:
-                break
+                if not (len(self.segmentsHistory) % 7):
+                    break
+                else:
+                    cv2.setWindowTitle('Frame', 'Placement (Miss much segments count)')
+                    cv2.waitKey(1000)
             elif key == -1:
                 quit()
             elif key == 8:
@@ -226,7 +230,7 @@ class VideoSetter:
     def convertCords(self, pos):
 
         # Координаты с экрана → Кординаты исходного кадра
-        
+
         frameSize = (self.frame.shape[0], self.frame.shape[1])
 
         if self.rotate == 0:
@@ -331,29 +335,6 @@ class VideoSetter:
 
     def allNamed(self):
         return all([d.isNamed() for d in self.digits])
-
-
-class Scanner:
-    def __init__(self, videoData):
-        self.startFrame = videoData.startFrame
-        self.step = videoData.step
-        self.digits = videoData.digits
-        self.capture = videoData.capture
-
-        _, self.currentFrame = self.capture.read()
-        self.FrameN = self.startFrame
-
-    def nextFrame(self):
-        self.capture.set(1, round(self.step * self.FrameN, 1))
-        self.FrameN += 1
-
-    def scan(self):
-        while True:
-
-            self.nextFrame()
-            if self.FrameN > 100:
-                print('end')
-                quit()
 
 
 class Segment:
