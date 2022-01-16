@@ -25,6 +25,7 @@ class VideoSetter:
 
         self.currentFrameScan = 5
         self.ScanFrame = self.fps
+        self.scan_data = []
 
         _, self.source_img = self._capture.read()
         self.frame = self.source_img.copy()
@@ -56,21 +57,22 @@ class VideoSetter:
                 self.currentFrameScan += 1
 
                 self.scan_data = []
-                self.scan_interupt = []
+                scan_interrupt = []
 
                 for d in self.digits:
                     scan = d.scan(self.source_img)
-                    self.scan_interupt.append(scan[0])
+                    scan_interrupt.append(scan[0])
                     self.scan_data.append(scan[1])
 
-                for i, res in enumerate(self.scan_interupt):
+                for i, res in enumerate(scan_interrupt):
                     if not res[0]:
                         self.digits[i].is_broken = True
 
-                print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in self.scan_interupt]))
+                print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in scan_interrupt]))
 
                 self.showFrame()
-                cv2.waitKey(1)
+                # cv2.waitKey(1)
+                cv2.waitKey(1000) 
 
                 if round(self.ScanFrame * (self.currentFrameScan + 1), 1) > self._capture.get(cv2.CAP_PROP_FRAME_COUNT):
                     print('Done')
@@ -96,11 +98,13 @@ class VideoSetter:
         [d.draw() for d in self.digits]
 
     def _drawBad(self):
-        for d in self.digits:
-            if d.is_broken:
-                break
-        else:
+        if not self.scan_data:
             return
+        # for d in self.digits:
+        #     if d.is_broken:
+        #         break
+        # else:
+        #     return
 
         block = round(self.frame.shape[0] / 9)
         digit_width = block * 5
@@ -218,21 +222,24 @@ class VideoSetter:
     def convertCords(self, pos):
 
         # Координаты с экрана → Кординаты исходного кадра
-        pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
-
-        for crop in self.cropping:
-            pos = (pos[0] + crop[0][0], pos[1] + crop[0][1])
+        
+        frameSize = (self.frame.shape[0], self.frame.shape[1])
 
         if self.rotate == 0:
             pos = (pos[0], pos[1])
         elif self.rotate == 1:
-            pos = (self.originalSize[0] - pos[1], pos[0])
+            pos = (frameSize[0] - pos[1], pos[0])
         elif self.rotate == 2:
-            pos = (self.originalSize[0] - pos[0], self.originalSize[1] - pos[1])
+            pos = (frameSize[1] - pos[0], frameSize[0] - pos[1])
         elif self.rotate == 3:
-            pos = (pos[1], self.originalSize[1] - pos[0])
+            pos = (pos[1], frameSize[1] - pos[0])
         else:
             raise IndexError
+
+        pos = (round(pos[0] / self.scaleF), round(pos[1] / self.scaleF))
+
+        for crop in self.cropping:
+            pos = (pos[0] + crop[0][0], pos[1] + crop[0][1])
 
         return pos
 
@@ -240,22 +247,24 @@ class VideoSetter:
 
         # Кординаты исходного кадра → Координаты на экране
 
-        if self.rotate == 0:
-            pos = (pos[0], pos[1])
-        elif self.rotate == 1:
-            pos = (pos[1], self.originalSize[0] - pos[0])
-        elif self.rotate == 2:
-            pos = (self.originalSize[0] - pos[0], self.originalSize[1] - pos[1])
-        elif self.rotate == 3:
-            pos = (self.originalSize[1] - pos[1], pos[0])
-
-        else:
-            raise IndexError
-
         for crop in self.cropping:
             pos = (pos[0] - crop[0][0], pos[1] - crop[0][1])
 
         pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
+
+        frameSize = (self.frame.shape[0], self.frame.shape[1])
+
+        if self.rotate == 0:
+            pos = (pos[0], pos[1])
+        elif self.rotate == 1:
+            pos = (pos[1], frameSize[0] - pos[0])
+        elif self.rotate == 2:
+            pos = (frameSize[1] - pos[0], frameSize[0] - pos[1])
+        elif self.rotate == 3:
+            pos = (frameSize[1] - pos[1], pos[0])
+
+        else:
+            raise IndexError
 
         return pos
 
@@ -346,8 +355,8 @@ class Scanner:
 class Segment:
     size = 7
 
-    onColor = np.array([194, 209, 191])
-    offColor = np.array([65, 56, 40])
+    offColor = 594
+    onColor = 139
 
     def __init__(self, digit, position, setter):
         self.digit = digit
@@ -356,16 +365,18 @@ class Segment:
         self.name = None
 
     def scan(self, frame):
-        color = self.getColor(frame, toList=False)
+        color = np.sum(self.getColor(frame, toList=False))
 
-        offDif = np.sum(np.abs(self.offColor - color))
-        onDif = np.sum(np.abs(self.onColor - color))
+        offDif = abs(color - self.offColor)
+        onDif = abs(color - self.onColor)
 
         return onDif < offDif
 
     def getColor(self, frame, pos=None, toList=True):
         if pos is None:
+            # pos = self.pos[1], self.pos[0]
             pos = self.pos
+
         return frame[pos[1], pos[0]].tolist() if toList else frame[pos[1], pos[0]]
 
     def draw(self, frame):
@@ -410,6 +421,8 @@ class Digit:
         self._isSorted = False
 
     def sort(self):
+        self.segments.sort(key=lambda seg: (SN.U, SN.UL, SN.UR, SN.M, SN.BL, SN.BR, SN.B).index(seg.name))
+
         for segment in self.segments:
             self.sorted[segment.name] = segment
             if segment.name is None:
