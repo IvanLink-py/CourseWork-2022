@@ -88,6 +88,10 @@ class VideoSetter:
             self.frame = cv2.resize(self.frame, (round(900 / self.ratio), 900))
             self.scaleF = 900 / self.sizeY
 
+        elif self.sizeX < 500 or self.sizeY < 500:
+            self.frame = cv2.resize(self.frame, (round(500 / self.ratio), 500))
+            self.scaleF = 500 / self.sizeY
+
         else:
             self.scaleF = 1
 
@@ -360,6 +364,7 @@ class Segment:
 
     def __init__(self, digit, position, setter):
         self.digit = digit
+        self.is_selected = False
         self.pos = position
         self.videoSetter = setter
         self.name = None
@@ -388,7 +393,9 @@ class Segment:
                       -1)
 
         color = 0, 0, 0
-        if self.digit.is_broken:
+        if self.is_selected:
+            color = 255, 255, 0
+        elif self.digit.is_broken:
             color = 0, 255, 255
         elif self.name is not None:
             color = 0, 255, 0
