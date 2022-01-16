@@ -4,6 +4,14 @@ import cv2
 import numpy as np
 
 
+class SetterState(Enum):
+    Transforming = auto()
+    Placement = auto()
+    Naming = auto()
+    Scanning = auto()
+    Fixing = auto()
+
+
 class VideoSetter:
     def __init__(self, path):
         self.path = path
@@ -12,10 +20,7 @@ class VideoSetter:
         self.cropping = []
         self.croppingArea = [(), ()]
 
-        self.isCropping = False
-        self.isRotating = False
-        self.isPlacement = False
-        self.isNaming = False
+        self.state = SetterState.Transforming
 
         self.scaleF = 1
         self.rotate = 0
@@ -39,8 +44,7 @@ class VideoSetter:
         self.showFrame()
         cv2.setMouseCallback('Frame', self.onClick)
 
-        self.crop()
-        self.rotating()
+        self.transform()
         self.placement()
         self.naming()
 
@@ -140,8 +144,10 @@ class VideoSetter:
 
         self.frame = np.concatenate((self.frame, digit_display_image), axis=1, dtype=np.uint8)
 
-    def crop(self):
-        self.isCropping = True
+    def transform(self):
+
+        self.state = SetterState.Transforming
+
         while True:
             self.showFrame()
             cv2.setWindowTitle('Frame', 'Cropping')
@@ -151,21 +157,6 @@ class VideoSetter:
             elif key == 8:
                 self.cropping.pop(-1)
                 self.showFrame()
-            elif key == -1:
-                quit()
-            else:
-                print(key)
-
-        self.isCropping = False
-
-    def rotating(self):
-        self.isRotating = True
-        while True:
-            self.showFrame()
-            cv2.setWindowTitle('Frame', 'Rotating')
-            key = cv2.waitKey()
-            if key == 13:
-                break
             elif ord('r') == key:
                 self.rotate = (self.rotate + 1) % 4
             elif key == -1:
@@ -173,10 +164,9 @@ class VideoSetter:
             else:
                 print(key)
 
-        self.isRotating = False
 
     def placement(self):
-        self.isPlacement = True
+        self.state = SetterState.Placement
 
         while True:
             self.showFrame()
@@ -195,10 +185,9 @@ class VideoSetter:
             else:
                 print(key)
 
-        self.isPlacement = False
-
     def naming(self):
-        self.isNaming = True
+        self.state = SetterState.Naming
+        
         self.namer = SN.getName()
         self.noNamedDigits = self.digits.copy()
 
@@ -213,7 +202,6 @@ class VideoSetter:
             elif key == 13 and self.allNamed():
                 break
 
-        self.isNaming = False
 
     def showFrame(self):
         self.frame = self.source_img.copy()
@@ -278,7 +266,7 @@ class VideoSetter:
 
     def onClick(self, event, posX, posY, flags, param):
         pos = self.convertCords((posX, posY))
-        if self.isCropping:
+        if self.state == SetterState.Transforming:
             if event == 1:
                 self.croppingArea[0] = pos
             elif event == 4:
@@ -286,12 +274,12 @@ class VideoSetter:
                 self.cropping.append(tuple(self.croppingArea))
                 self.croppingArea = [(), ()]
                 self.showFrame()
-        elif self.isPlacement:
+        elif self.state == SetterState.Placement:
             if event == 1:
                 self.setSegment(pos)
                 self.showFrame()
 
-        elif self.isNaming:
+        elif self.state == SetterState.Naming:
             if event == 1:
 
                 noNames = []
