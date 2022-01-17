@@ -26,6 +26,7 @@ class VideoSetter:
         self.scaleF = 1
         self.rotate = 0
         self.digits = []
+        self.noNamedSegments = []
         self.segmentsHistory = []
         self.nameHistory = []
 
@@ -106,7 +107,7 @@ class VideoSetter:
         self.frame = np.ascontiguousarray(np.rot90(self.frame, self.rotate), dtype=np.uint8)
 
     def _drawSegments(self):
-        [d.draw() for d in self.digits]
+        [seg.draw(self.frame) for seg in self.segmentsHistory]
 
     def _drawBad(self):
         if not self.scan_data:
@@ -153,14 +154,14 @@ class VideoSetter:
 
         while True:
             self.showFrame()
-            cv2.setWindowTitle('Frame', 'Cropping')
+            cv2.setWindowTitle('Frame', 'Transforming')
             key = cv2.waitKey()
             if key == 13:
                 break
             elif key == 8:
                 if self.croppingHistory:
                     self.croppingHistory.pop(-1)
-                    self.cropping = self.croppingHistory[-1]
+                    self.cropping = self.croppingHistory[-1] if self.croppingHistory else None
                     self.showFrame()
             elif ord('r') == key:
                 self.rotate = (self.rotate + 1) % 4
@@ -177,7 +178,7 @@ class VideoSetter:
             cv2.setWindowTitle('Frame', 'Placement')
             key = cv2.waitKey()
             if key == 13:
-                if not (len(self.segmentsHistory) % 7):
+                if not (len(self.segmentsHistory) % 7) and self.segmentsHistory:
                     break
                 else:
                     cv2.setWindowTitle('Frame', 'Placement (Miss much segments count)')
@@ -193,16 +194,22 @@ class VideoSetter:
         self.state = SetterState.Naming
 
         self.namer = SN.getName()
-        self.noNamedDigits = self.digits.copy()
+
+        self.noNamedDigits = []
+        for i in range(len(self.noNamedSegments) // 7):
+            self.noNamedDigits.append(Digit(self))
 
         self.showFrame()
         cv2.setWindowTitle('Frame', 'Naming')
         while True:
             key = cv2.waitKey()
             if key == 8:
-                self.nameHistory[-1].name = None
-                self.nameHistory.pop(-1)
-                self.showFrame()
+                if self.nameHistory:
+                    seg = self.nameHistory.pop(-1)
+                    if len(seg.digit.segments) == 6:
+                        self.noNamedDigits.append(seg.digit)
+                    seg.removeName()
+
             elif key == 13 and self.allNamed():
                 break
 
@@ -274,19 +281,21 @@ class VideoSetter:
             if event == 1:
                 self.croppingArea[0] = pos
             elif event == 4:
-                self.croppingArea[1] = pos
 
-                self.croppingArea = [(min(self.croppingArea[0][0], self.croppingArea[1][0]),
-                                  min(self.croppingArea[0][1], self.croppingArea[1][1])),
+                if self.croppingArea[0] != pos:
+                    self.croppingArea[1] = pos
 
-                                 (max(self.croppingArea[0][0], self.croppingArea[1][0]),
-                                  max(self.croppingArea[0][1], self.croppingArea[1][1]))]
+                    self.croppingArea = [(min(self.croppingArea[0][0], self.croppingArea[1][0]),
+                                          min(self.croppingArea[0][1], self.croppingArea[1][1])),
 
-                self.cropping = tuple(self.croppingArea)
-                self.croppingHistory.append(tuple(self.croppingArea))
+                                         (max(self.croppingArea[0][0], self.croppingArea[1][0]),
+                                          max(self.croppingArea[0][1], self.croppingArea[1][1]))]
 
-                self.croppingArea = [(), ()]
-                self.showFrame()
+                    self.cropping = tuple(self.croppingArea)
+                    self.croppingHistory.append(tuple(self.croppingArea))
+
+                    self.croppingArea = [(), ()]
+                    self.showFrame()
         elif self.state == SetterState.Placement:
             if event == 1:
                 self.setSegment(pos)
@@ -295,47 +304,37 @@ class VideoSetter:
         elif self.state == SetterState.Naming:
             if event == 1:
 
-                noNames = []
-
-                for d in self.noNamedDigits:
-                    if d.isNamed():
-                        d.isNaming = False
-                        continue
-                    noNames = [s for s in d.segments if s.name is None]
-                    d.isNaming = True
-                    break
-
-                if noNames:
-                    seg = min(noNames, key=lambda p: (p.pos[0] - pos[0]) ** 2 + (p.pos[1] - pos[1]) ** 2)
+                if self.noNamedSegments:
+                    seg = min(self.noNamedSegments, key=lambda p: (p.pos[0] - pos[0]) ** 2 + (p.pos[1] - pos[1]) ** 2)
                     seg.name = self.namer.__next__()
                     self.nameHistory.append(seg)
 
-                self.showFrame()
+                    digit = self.noNamedDigits[0]
+
+                    seg.setDigit(digit)
+                    self.noNamedSegments.remove(seg)
+
+                    self.showFrame()
+
+                if self.noNamedDigits[0].isNamed():
+                    self.digits.append(self.noNamedDigits.pop(0))
 
     def setSegment(self, pos):
-        if not self.digits:
-            self.digits.append(Digit(self))
-        for d in self.digits:
-            if d.isFull():
-                continue
-            d.place(pos)
-            break
-        else:
-            self.digits.append(Digit(self))
-            self.digits[-1].place(pos)
+        new_seg = Segment(pos, self)
+        self.noNamedSegments.append(new_seg)
+        self.segmentsHistory.append(new_seg)
 
     def removeLast(self):
         if self.segmentsHistory:
             seg = self.segmentsHistory[-1]
-            digit = seg.digit
-            digit.segments.remove(seg)
+
             self.segmentsHistory.remove(seg)
-            if digit.isEmpty():
-                self.digits.remove(digit)
-        self.showFrame()
+            self.noNamedSegments.remove(seg)
+
+            self.showFrame()
 
     def allNamed(self):
-        return all([d.isNamed() for d in self.digits])
+        return not self.noNamedSegments
 
 
 class Segment:
@@ -344,12 +343,21 @@ class Segment:
     offColor = 594
     onColor = 139
 
-    def __init__(self, digit, position, setter):
-        self.digit = digit
+    def __init__(self, position, setter):
         self.is_selected = False
         self.pos = position
         self.videoSetter = setter
         self.name = None
+        self.digit = None
+
+    def setDigit(self, digit):
+        self.digit = digit
+        digit.setSegment(self)
+
+    def removeName(self):
+        self.digit.segments.remove(self)
+        self.name = None
+        self.digit = None
 
     def scan(self, frame):
         color = np.sum(self.getColor(frame, toList=False))
@@ -377,11 +385,11 @@ class Segment:
         color = 0, 0, 0
         if self.is_selected:
             color = 255, 255, 0
-        elif self.digit.is_broken:
+        elif self.digit is not None and self.digit.is_broken:
             color = 0, 255, 255
         elif self.name is not None:
             color = 0, 255, 0
-        elif self.digit.isNaming:
+        elif self.digit is not None and self.digit.isNaming:
             color = 255, 0, 0
 
         cv2.rectangle(frame,
@@ -420,10 +428,8 @@ class Digit:
             raise KeyError
         self._isSorted = True
 
-    def place(self, position):
-        new_seg = Segment(self, position, self.video)
-        self.segments.append(new_seg)
-        self.video.segmentsHistory.append(new_seg)
+    def setSegment(self, seg):
+        self.segments.append(seg)
 
     def scan(self, frame):
         data = {}
@@ -438,9 +444,6 @@ class Digit:
     def interpret(data):
         return Interrupt.find(data)
 
-    def draw(self):
-        [seg.draw(self.video.frame) for seg in self.segments]
-
     def removeLast(self):
         self.segments.pop(-1)
 
@@ -448,7 +451,7 @@ class Digit:
         return len(self.segments) >= 7
 
     def isNamed(self):
-        return all([s.name is not None for s in self.segments])
+        return all([s.name is not None for s in self.segments]) and len(self.segments) == 7
 
     def isEmpty(self):
         return not self.segments
