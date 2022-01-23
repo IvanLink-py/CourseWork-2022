@@ -1,8 +1,11 @@
 from VideoSetter import VideoSetter
+import configparser
 
 class App:
     def __init__(self):
-        self._video = VideoSetter('Experiments/E-1/video.mp4')
+        self.config = configparser.ConfigParser()
+        self.config.read("config.ini")
+        self._video = VideoSetter(self.config)
 
     def run(self):
         self._video.set()

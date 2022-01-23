@@ -13,9 +13,10 @@ class SetterState(Enum):
 
 
 class VideoSetter:
-    def __init__(self, path):
-        self.path = path
-        self._capture = cv2.VideoCapture(path)
+    def __init__(self, config):
+        self.config = config
+        self.path = config['Video']['videoPath']
+        self._capture = cv2.VideoCapture(self.path)
         self.fps = self._capture.get(5)
         self.cropping = None
         self.croppingHistory = []
@@ -34,9 +35,11 @@ class VideoSetter:
         self.error_count = 0
         self.selection = []
         self.previewSize = (0, 0)
+        self.decimalPoint = int(self.config['Video']['decimalPoint'])
 
-        self.currentFrameScan = 5
+        self.currentFrameScan = int(self.config['Video']['startSec'])
         self.ScanFrame = self.fps
+        self._capture.set(1, round(self.ScanFrame * self.currentFrameScan, 1))
         self.scan_data = []
 
         _, self.source_img = self._capture.read()
@@ -136,7 +139,8 @@ class VideoSetter:
                     self.digits[i].is_broken = True
                     self.error_count += 0
 
-            print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in scan_interrupt]))
+            print(f'{self.ScanFrame * self.currentFrameScan} - ' + str(int(''.join([str(i[1]) for i in scan_interrupt])) / (
+                        10 ** self.decimalPoint)))
 
     def transform(self):
 
@@ -248,8 +252,8 @@ class VideoSetter:
             elif key == (119, 97, 115, 100)[(3 + self.rotate) % 4]:
                 [seg.move((2, 0)) for seg in self.selection]
             elif key == 102:
-                [s.select() for s in self.selection]
                 self.selection = self.segmentsHistory.copy()
+                [s.select() for s in self.selection]
             elif key == 13:
                 break
             elif ord('r') == key:
@@ -378,13 +382,13 @@ class VideoSetter:
                           key=lambda p: (p.pos[0] - pos[0]) ** 2 + (p.pos[1] - pos[1]) ** 2)
                 [s.deselect() for s in self.selection]
                 self.selection = [seg]
-                seg.isSelected = True
+                seg.select()
                 self.showFrame()
             elif event == 2:
                 seg = min([s for s in self.segmentsHistory if not s.isSelected],
                           key=lambda p: (p.pos[0] - pos[0]) ** 2 + (p.pos[1] - pos[1]) ** 2)
                 self.selection.append(seg)
-                seg.isSelected = True
+                seg.select()
                 self.showFrame()
 
     def setSegment(self, pos):
