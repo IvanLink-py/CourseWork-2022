@@ -36,10 +36,11 @@ class VideoSetter:
         self.selection = []
         self.previewSize = (0, 0)
         self.decimalPoint = int(self.config['Video']['decimalPoint'])
+        self.totalFrameCount = self._capture.get(cv2.CAP_PROP_FRAME_COUNT)
+        self.global_scan_data = {}
 
-        self.currentFrameScan = int(self.config['Video']['startSec'])
-        self.ScanFrame = self.fps
-        self._capture.set(1, round(self.ScanFrame * self.currentFrameScan, 1))
+        self.currentSecScan = int(self.config['Video']['startSec'])
+        self._capture.set(1, round(self.fps * self.currentSecScan, 1))
         self.scan_data = []
 
         _, self.source_img = self._capture.read()
@@ -90,7 +91,7 @@ class VideoSetter:
         block = round(self.frame.shape[0] / 9)
         digit_width = block * 5
 
-        digit_display_image = np.zeros((self.frame.shape[0], digit_width * len(self.digits), 3), np.uint8)
+        digit_display_image = np.zeros((self.frame.shape[0], digit_width * len(self.digits) + 1 * block, 3), np.uint8)
         self.previewSize = (self.frame.shape[0], digit_width * len(self.digits))
 
         segments_positions = [
@@ -116,14 +117,18 @@ class VideoSetter:
                                   main_anchor + segments_positions[s][0], main_anchor + segments_positions[s][1],
                                   (50, 50, 50), -1)
 
+        anchor = np.array([len(self.digits) * digit_width, 0])
+        height = round(9 * block * self.fps * self.currentSecScan / self.totalFrameCount)
+        cv2.rectangle(digit_display_image, anchor, anchor + (block, height), (0, 255, 0), -1)
+
         self.frame = np.concatenate((self.frame, digit_display_image), axis=1, dtype=np.uint8)
 
     def _scan(self, nextFrame=True):
-        self._capture.set(1, round(self.ScanFrame * self.currentFrameScan, 1))
+        self._capture.set(1, round(self.fps * self.currentSecScan, 1))
         ret, self.source_img = self._capture.read()
         if ret:
             if nextFrame:
-                self.currentFrameScan += 1
+                self.currentSecScan += 1
 
             self.scan_data = []
             scan_interrupt = []
@@ -139,8 +144,8 @@ class VideoSetter:
                     self.digits[i].is_broken = True
                     self.error_count += 0
 
-            print(f'{self.ScanFrame * self.currentFrameScan} - ' + str(int(''.join([str(i[1]) for i in scan_interrupt])) / (
-                        10 ** self.decimalPoint)))
+            if nextFrame:
+                return int(''.join([str(i[1]) for i in scan_interrupt])) / (10 ** self.decimalPoint)
 
     def transform(self):
 
@@ -221,19 +226,23 @@ class VideoSetter:
         [dig.sort() for dig in self.digits]
 
         while True:
-            self._scan(True)
+
+            data = self._scan(True)
+            print(f'{self.currentSecScan}-{data}')
+            self.global_scan_data[self.currentSecScan] = data
 
             self.showFrame()
-            # key = cv2.waitKey(10 ** self.error_count)
-            key = cv2.waitKey(1000)
+            key = cv2.waitKey(10 ** self.error_count)
 
             if key == 102:
                 self.fixing()
                 self.state = SetterState.Scanning
 
-            if round(self.ScanFrame * (self.currentFrameScan + 1), 1) > self._capture.get(cv2.CAP_PROP_FRAME_COUNT):
+            if round(self.fps * (self.currentSecScan + 1), 1) > self.totalFrameCount:
                 print('Done')
                 break
+
+        return self.global_scan_data
 
     def fixing(self):
         self.state = SetterState.Fixing
