@@ -499,4 +499,11 @@ class Interrupt:
             return True, Interrupt.dataSet.index(data)
         else:
             print('Жопа')
-            return False, 0
+            errors = []
+            for number_data in Interrupt.dataSet:
+                error = 0
+                for seg in number_data:
+                    if data[seg] != number_data[seg]:
+                        error += 1
+                errors.append(error)
+            return False, np.argmin(errors)
