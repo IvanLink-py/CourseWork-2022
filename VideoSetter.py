@@ -91,7 +91,8 @@ class VideoSetter:
         block = round(self.frame.shape[0] / 9)
         digit_width = block * 5
 
-        digit_display_image = np.zeros((self.frame.shape[0], digit_width * len(self.digits) + 1 * block, 3), np.uint8)
+        digit_display_image = np.zeros(
+            (self.frame.shape[0], round(1.2 * digit_width * len(self.digits) + 1 * block), 3), np.uint8)
         self.previewSize = (self.frame.shape[0], digit_width * len(self.digits))
 
         segments_positions = [
@@ -105,7 +106,7 @@ class VideoSetter:
         ]
 
         for i, d in enumerate(self.digits):
-            main_anchor = np.array([digit_width * i, 0])
+            main_anchor = np.array([round(digit_width * i * 1.2), 0])
 
             for s in range(7):
                 if list(self.scan_data[i].values())[s]:
@@ -117,7 +118,7 @@ class VideoSetter:
                                   main_anchor + segments_positions[s][0], main_anchor + segments_positions[s][1],
                                   (50, 50, 50), -1)
 
-        anchor = np.array([len(self.digits) * digit_width, 0])
+        anchor = np.array([round(len(self.digits) * digit_width * 1.2), 0])
         height = round(9 * block * self.fps * self.currentSecScan / self.totalFrameCount)
         cv2.rectangle(digit_display_image, anchor, anchor + (block, height), (0, 255, 0), -1)
 
@@ -269,6 +270,7 @@ class VideoSetter:
                 self.rotate = (self.rotate + 1) % 4
 
             self.showFrame()
+        [s.deselect() for s in self.selection]
 
     def showFrame(self):
         self.frame = self.source_img.copy()
@@ -382,8 +384,8 @@ class VideoSetter:
 
                     self.showFrame()
 
-                if self.noNamedDigits[0].isNamed():
-                    self.digits.append(self.noNamedDigits.pop(0))
+                    if self.noNamedDigits[0].isNamed():
+                        self.digits.append(self.noNamedDigits.pop(0))
 
         elif self.state == SetterState.Fixing:
             if event == 1:

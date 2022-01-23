@@ -2,7 +2,6 @@ import configparser
 
 from VideoSetter import VideoSetter
 
-
 class App:
     def __init__(self):
         self.config = configparser.ConfigParser()
