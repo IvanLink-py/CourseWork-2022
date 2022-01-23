@@ -29,6 +29,11 @@ class VideoSetter:
         self.noNamedSegments = []
         self.segmentsHistory = []
         self.nameHistory = []
+        self.name_index = 0
+        self.noNamedDigits = []
+        self.error_count = 0
+        self.selection = []
+        self.previewSize = (0, 0)
 
         self.currentFrameScan = 5
         self.ScanFrame = self.fps
@@ -49,45 +54,6 @@ class VideoSetter:
         self.transform()
         self.placement()
         self.naming()
-
-        cv2.destroyWindow('Frame')
-
-    def scan(self):
-
-        self.state = SetterState.Scanning
-
-        [dig.sort() for dig in self.digits]
-
-        while True:
-            self._capture.set(1, round(self.ScanFrame * self.currentFrameScan, 1))
-            ret, self.source_img = self._capture.read()
-            if ret:
-                self.currentFrameScan += 1
-
-                self.scan_data = []
-                scan_interrupt = []
-
-                for d in self.digits:
-                    scan = d.scan(self.source_img)
-                    scan_interrupt.append(scan[0])
-                    self.scan_data.append(scan[1])
-
-                for i, res in enumerate(scan_interrupt):
-                    if not res[0]:
-                        self.digits[i].is_broken = True
-
-                print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in scan_interrupt]))
-
-                self.showFrame()
-                # cv2.waitKey(1)
-                cv2.waitKey(1000)
-
-                if round(self.ScanFrame * (self.currentFrameScan + 1), 1) > self._capture.get(cv2.CAP_PROP_FRAME_COUNT):
-                    print('Done')
-                    break
-
-            else:
-                raise cv2.error
 
     def _scale(self):
         self.sizeY, self.sizeX, _ = self.frame.shape
@@ -122,6 +88,7 @@ class VideoSetter:
         digit_width = block * 5
 
         digit_display_image = np.zeros((self.frame.shape[0], digit_width * len(self.digits), 3), np.uint8)
+        self.previewSize = (self.frame.shape[0], digit_width * len(self.digits))
 
         segments_positions = [
             ((1 * block, 0 * block), (4 * block, 1 * block)),
@@ -147,6 +114,29 @@ class VideoSetter:
                                   (50, 50, 50), -1)
 
         self.frame = np.concatenate((self.frame, digit_display_image), axis=1, dtype=np.uint8)
+
+    def _scan(self, nextFrame=True):
+        self._capture.set(1, round(self.ScanFrame * self.currentFrameScan, 1))
+        ret, self.source_img = self._capture.read()
+        if ret:
+            if nextFrame:
+                self.currentFrameScan += 1
+
+            self.scan_data = []
+            scan_interrupt = []
+
+            for d in self.digits:
+                scan = d.scan(self.source_img)
+                scan_interrupt.append(scan[0])
+                self.scan_data.append(scan[1])
+
+            self.error_count = 0
+            for i, res in enumerate(scan_interrupt):
+                if not res[0]:
+                    self.digits[i].is_broken = True
+                    self.error_count += 0
+
+            print(f'{self.ScanFrame * self.currentFrameScan} - ' + ''.join([str(i[1]) for i in scan_interrupt]))
 
     def transform(self):
 
@@ -193,9 +183,6 @@ class VideoSetter:
     def naming(self):
         self.state = SetterState.Naming
 
-        self.name_index = 0
-
-        self.noNamedDigits = []
         for i in range(len(self.noNamedSegments) // 7):
             self.noNamedDigits.append(Digit(self))
 
@@ -218,6 +205,58 @@ class VideoSetter:
             elif key == 13 and self.allNamed():
                 break
 
+            elif key == -1:
+                quit()
+
+    def scan(self):
+
+        cv2.setWindowTitle('Frame', 'Scanning')
+
+        self.state = SetterState.Scanning
+
+        [dig.sort() for dig in self.digits]
+
+        while True:
+            self._scan(True)
+
+            self.showFrame()
+            # key = cv2.waitKey(10 ** self.error_count)
+            key = cv2.waitKey(1000)
+
+            if key == 102:
+                self.fixing()
+                self.state = SetterState.Scanning
+
+            if round(self.ScanFrame * (self.currentFrameScan + 1), 1) > self._capture.get(cv2.CAP_PROP_FRAME_COUNT):
+                print('Done')
+                break
+
+    def fixing(self):
+        self.state = SetterState.Fixing
+        self.selection = []
+        cv2.setWindowTitle('Frame', 'Fixing')
+        while True:
+            self._scan(False)
+
+            key = cv2.waitKey()
+            if key == (119, 97, 115, 100)[(0 + self.rotate) % 4]:
+                [seg.move((0, -2)) for seg in self.selection]
+            elif key == (119, 97, 115, 100)[(1 + self.rotate) % 4]:
+                [seg.move((-2, 0)) for seg in self.selection]
+            elif key == (119, 97, 115, 100)[(2 + self.rotate) % 4]:
+                [seg.move((0, 2)) for seg in self.selection]
+            elif key == (119, 97, 115, 100)[(3 + self.rotate) % 4]:
+                [seg.move((2, 0)) for seg in self.selection]
+            elif key == 102:
+                [s.select() for s in self.selection]
+                self.selection = self.segmentsHistory.copy()
+            elif key == 13:
+                break
+            elif ord('r') == key:
+                self.rotate = (self.rotate + 1) % 4
+
+            self.showFrame()
+
     def showFrame(self):
         self.frame = self.source_img.copy()
 
@@ -226,6 +265,7 @@ class VideoSetter:
 
         self._scale()
         self._rotate()
+        self.sizeY, self.sizeX, _ = self.frame.shape
         self._drawSegments()
         self._drawBad()
 
@@ -235,7 +275,7 @@ class VideoSetter:
 
         # Координаты с экрана → Кординаты исходного кадра
 
-        frameSize = (self.frame.shape[0], self.frame.shape[1])
+        frameSize = (self.sizeY, self.sizeX)
 
         if self.rotate == 0:
             pos = (pos[0], pos[1])
@@ -264,7 +304,7 @@ class VideoSetter:
 
         pos = (round(pos[0] * self.scaleF), round(pos[1] * self.scaleF))
 
-        frameSize = (self.frame.shape[0], self.frame.shape[1])
+        frameSize = (self.sizeY, self.sizeX)
 
         if self.rotate == 0:
             pos = (pos[0], pos[1])
@@ -332,6 +372,21 @@ class VideoSetter:
                 if self.noNamedDigits[0].isNamed():
                     self.digits.append(self.noNamedDigits.pop(0))
 
+        elif self.state == SetterState.Fixing:
+            if event == 1:
+                seg = min(self.segmentsHistory,
+                          key=lambda p: (p.pos[0] - pos[0]) ** 2 + (p.pos[1] - pos[1]) ** 2)
+                [s.deselect() for s in self.selection]
+                self.selection = [seg]
+                seg.isSelected = True
+                self.showFrame()
+            elif event == 2:
+                seg = min([s for s in self.segmentsHistory if not s.isSelected],
+                          key=lambda p: (p.pos[0] - pos[0]) ** 2 + (p.pos[1] - pos[1]) ** 2)
+                self.selection.append(seg)
+                seg.isSelected = True
+                self.showFrame()
+
     def setSegment(self, pos):
         new_seg = Segment(pos, self)
         self.noNamedSegments.append(new_seg)
@@ -359,8 +414,15 @@ class Segment:
     def __init__(self, position, setter):
         self.pos = position
         self.videoSetter = setter
+        self.isSelected = False
         self.name = None
         self.digit = None
+
+    def select(self):
+        self.isSelected = True
+
+    def deselect(self):
+        self.isSelected = False
 
     def setDigit(self, digit):
         self.digit = digit
@@ -395,7 +457,9 @@ class Segment:
                       -1)
 
         color = 0, 0, 0
-        if self.digit is not None and self.digit.is_broken:
+        if self.isSelected:
+            color = 255, 0, 255
+        elif self.digit is not None and self.digit.is_broken:
             color = 0, 255, 255
         elif self.digit is not None and self.digit.isNamed():
             color = 255, 0, 0
@@ -415,6 +479,9 @@ class Segment:
                       1)
 
         # print(self.getColor(frame, pos))
+
+    def move(self, offset):
+        self.pos = (self.pos[0] + offset[0], self.pos[1] + offset[1])
 
 
 class Digit:
