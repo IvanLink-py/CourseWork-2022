@@ -193,7 +193,7 @@ class VideoSetter:
     def naming(self):
         self.state = SetterState.Naming
 
-        self.namer = SN.getName()
+        self.name_index = 0
 
         self.noNamedDigits = []
         for i in range(len(self.noNamedSegments) // 7):
@@ -206,9 +206,14 @@ class VideoSetter:
             if key == 8:
                 if self.nameHistory:
                     seg = self.nameHistory.pop(-1)
-                    if len(seg.digit.segments) == 6:
-                        self.noNamedDigits.append(seg.digit)
+                    if len(seg.digit.segments) == 7:
+                        d = seg.digit
+                        self.digits.remove(d)
+                        self.noNamedDigits.insert(0, d)
+                    self.noNamedSegments.append(seg)
                     seg.removeName()
+                    self.name_index -= 1
+                    self.showFrame()
 
             elif key == 13 and self.allNamed():
                 break
@@ -291,11 +296,18 @@ class VideoSetter:
                                          (max(self.croppingArea[0][0], self.croppingArea[1][0]),
                                           max(self.croppingArea[0][1], self.croppingArea[1][1]))]
 
-                    self.cropping = tuple(self.croppingArea)
-                    self.croppingHistory.append(tuple(self.croppingArea))
+                    if abs(self.croppingArea[0][0] - self.croppingArea[1][0]) + abs(
+                            self.croppingArea[0][1] - self.croppingArea[1][1]) < 50:
+                        cv2.setWindowTitle('Frame', 'Transforming (to small area)')
+                        cv2.waitKey(1000)
+                        cv2.setWindowTitle('Frame', 'Transforming')
+                    else:
+                        self.cropping = tuple(self.croppingArea)
+                        self.croppingHistory.append(tuple(self.croppingArea))
 
                     self.croppingArea = [(), ()]
                     self.showFrame()
+
         elif self.state == SetterState.Placement:
             if event == 1:
                 self.setSegment(pos)
@@ -306,7 +318,8 @@ class VideoSetter:
 
                 if self.noNamedSegments:
                     seg = min(self.noNamedSegments, key=lambda p: (p.pos[0] - pos[0]) ** 2 + (p.pos[1] - pos[1]) ** 2)
-                    seg.name = self.namer.__next__()
+                    seg.name = SN.getName(self.name_index)
+                    self.name_index += 1
                     self.nameHistory.append(seg)
 
                     digit = self.noNamedDigits[0]
@@ -344,7 +357,6 @@ class Segment:
     onColor = 139
 
     def __init__(self, position, setter):
-        self.is_selected = False
         self.pos = position
         self.videoSetter = setter
         self.name = None
@@ -383,14 +395,12 @@ class Segment:
                       -1)
 
         color = 0, 0, 0
-        if self.is_selected:
-            color = 255, 255, 0
-        elif self.digit is not None and self.digit.is_broken:
+        if self.digit is not None and self.digit.is_broken:
             color = 0, 255, 255
+        elif self.digit is not None and self.digit.isNamed():
+            color = 255, 0, 0
         elif self.name is not None:
             color = 0, 255, 0
-        elif self.digit is not None and self.digit.isNaming:
-            color = 255, 0, 0
 
         cv2.rectangle(frame,
                       (pos[0] - self.size, pos[1] - self.size),
@@ -467,10 +477,8 @@ class SN(Enum):  # Segment Name
     B = auto()
 
     @staticmethod
-    def getName():
-        while True:
-            for name in SN:
-                yield name
+    def getName(i):
+        return (SN.U, SN.UL, SN.UR, SN.M, SN.BL, SN.BR, SN.B)[i % 7]
 
 
 class Interrupt:
