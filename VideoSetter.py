@@ -580,7 +580,6 @@ class Interrupt:
         if data in Interrupt.dataSet:
             return True, Interrupt.dataSet.index(data)
         else:
-            print('Жопа')
             errors = []
             for number_data in Interrupt.dataSet:
                 error = 0
