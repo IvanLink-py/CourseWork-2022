@@ -1,12 +1,12 @@
 import configparser
 
-from VideoSetter import VideoSetter
+from VideoScanner import VideoScanner
 
 class App:
     def __init__(self):
         self.config = configparser.ConfigParser()
         self.config.read("config.ini")
-        self._video = VideoSetter(self.config)
+        self._video = VideoScanner(self.config)
         self.data = {}
 
     def run(self):
