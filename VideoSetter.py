@@ -34,7 +34,6 @@ class VideoSetter:
         self.noNamedDigits = []
         self.error_count = 0
         self.selection = []
-        self.previewSize = (0, 0)
         self.decimalPoint = int(self.config['Video']['decimalPoint'])
         self.totalFrameCount = self._capture.get(cv2.CAP_PROP_FRAME_COUNT)
         self.global_scan_data = {}
