@@ -12,7 +12,7 @@ class SetterState(Enum):
     Fixing = auto()
 
 
-class VideoSetter:
+class VideoScanner:
     def __init__(self, config):
         self.config = config
         self.path = config['Video']['videoPath']
