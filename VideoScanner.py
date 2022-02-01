@@ -46,7 +46,6 @@ class VideoScanner:
         self.frame = self.source_img.copy()
 
         self.sizeY, self.sizeX, _ = self.frame.shape
-        self.originalSize = (self.sizeX, self.sizeY)
 
         self.ratio = self.sizeY / self.sizeX
 
@@ -78,7 +77,7 @@ class VideoScanner:
     def _drawSegments(self):
         [seg.draw(self.frame) for seg in self.segmentsHistory]
 
-    def _drawBad(self):
+    def _drawPreview(self):
         if not self.scan_data:
             return
         # for d in self.digits:
@@ -274,16 +273,20 @@ class VideoScanner:
     def showFrame(self):
         self.frame = self.source_img.copy()
 
-        if self.cropping is not None:
-            self.frame = self.frame[self.cropping[0][1]:self.cropping[1][1], self.cropping[0][0]:self.cropping[1][0]]
-
+        self._cropping()
         self._scale()
         self._rotate()
+
         self.sizeY, self.sizeX, _ = self.frame.shape
+
         self._drawSegments()
-        self._drawBad()
+        self._drawPreview()
 
         cv2.imshow('Frame', self.frame)
+
+    def _cropping(self):
+        if self.cropping is not None:
+            self.frame = self.frame[self.cropping[0][1]:self.cropping[1][1], self.cropping[0][0]:self.cropping[1][0]]
 
     def convertCords(self, pos):
 
